@@ -50,6 +50,10 @@ public class Directory implements Writable {
         return buckets.get(directory.get(pos));
     }
 
+    public Bucket getBucketByEntryKey(int key) {
+        return getBucket(positionInDirectory(key));
+    }
+
     public void putBucket(Bucket bucket, int pos) {
         if (!buckets.contains(bucket)) {
             buckets.add(bucket);

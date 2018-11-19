@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import net.almightshell.ecache.client.ECacheClient;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -56,11 +57,17 @@ public class EFile {
 
     EFileMetadata metadata = new EFileMetadata();
     private Path currentDataPartPath = null;
+    private ECacheClient cacheClient = null;
 
-    private EFile(Configuration conf, Path filePath, boolean newFile) throws IOException {
+    private EFile(Configuration conf, Path filePath, boolean newFile) throws IOException, Exception {
         this.conf = conf;
         this.filePath = filePath;
         fs = FileSystem.get(conf);
+
+        if (metadata.isCacheEanabled()) {
+//            cacheClient = new ECacheClient(filePath.toString(), ECacheConstants.DEFAULT_PORT, "", true);
+            cacheClient = new ECacheClient(filePath.toString(), 8040, "", true);
+        }
 
         if (newFile) {
             if (fs.exists(filePath)) {
@@ -81,11 +88,11 @@ public class EFile {
         }
     }
 
-    public static EFile newFile(Configuration conf, Path filePath) throws IOException {
+    public static EFile newFile(Configuration conf, Path filePath) throws IOException, Exception {
         return new EFile(conf, filePath, true);
     }
 
-    public static EFile open(Configuration conf, Path filePath) throws IOException {
+    public static EFile open(Configuration conf, Path filePath) throws IOException, Exception {
         return new EFile(conf, filePath, false);
     }
 
@@ -167,7 +174,18 @@ public class EFile {
     }
 
     public InputStream get(String name) throws IOException {
-        BucketEntry entry = getBucketEntry(name);
+        BucketEntry entry = null;
+
+        //get metadata from cache
+        if (metadata.isCacheEanabled()) {
+            byte[] bt = cacheClient.get(name.hashCode());
+            if (bt != null) {
+                entry = EFilesUtil.asWritable(bt, BucketEntry.class);
+            }
+        }
+        if (entry == null) {
+            entry = getBucketEntry(name);
+        }
 
         if (entry == null) {
             throw new FileNotFoundException(name + " not found in " + filePath.getName());
@@ -188,8 +206,7 @@ public class EFile {
 
     private void addBucketEntry(BucketEntry entry) throws IOException {
         int key = entry.hashCode();
-        int position = metadata.getDirectory().positionInDirectory(key);
-        Bucket bucket = metadata.getDirectory().getBucket(position);
+        Bucket bucket = metadata.getDirectory().getBucketByEntryKey(key);
 
         //write the index record
         try (FSDataOutputStream out = fs.append(bucket.getPath())) {
@@ -200,6 +217,11 @@ public class EFile {
         //split the bucket if full
         if (bucket.getSize() >= metadata.getBucketCapacity()) {
             splitBucket(bucket, key);
+        }
+
+        //add metadata to cache
+        if (metadata.isCacheEanabled()) {
+            cacheClient.put(key, EFilesUtil.serialize(entry));
         }
 
     }
@@ -301,17 +323,6 @@ public class EFile {
                 metadata.readFields(in);
             }
         }
-    }
-
-    private boolean checkValidName(String name) {
-        Path tmp = new Path(name);
-        if (tmp.depth() != 1) {
-            return false;
-        }
-        if (name.endsWith(".elf")) {
-            return true;
-        }
-        return false;
     }
 
     private Path getMetadataPath() {

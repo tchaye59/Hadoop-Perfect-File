@@ -7,17 +7,53 @@ package net.almightshell.efiles;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.math.BigInteger;
+import org.apache.commons.io.IOUtils;
+import org.apache.hadoop.io.Writable;
 
 /**
  *
  * @author Shell
  */
 public class EFilesUtil {
+
+    public static byte[] serialize(Writable writable) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        DataOutputStream dataOut = null;
+        try {
+            dataOut = new DataOutputStream(out);
+            writable.write(dataOut);
+            return out.toByteArray();
+        } finally {
+            IOUtils.closeQuietly(dataOut);
+        }
+    }
+
+    public static <T extends Writable> T asWritable(byte[] bytes, Class<T> clazz)throws IOException {
+        T result = null;
+        DataInputStream dataIn = null;
+        try {
+            result = clazz.newInstance();
+            ByteArrayInputStream in = new ByteArrayInputStream(bytes);
+            dataIn = new DataInputStream(in);
+            result.readFields(dataIn);
+        } catch (InstantiationException e) {
+            // should not happen
+            assert false;
+        } catch (IllegalAccessException e) {
+            // should not happen
+            assert false;
+        } finally {
+            IOUtils.closeQuietly(dataIn);
+        }
+        return result;
+    }
 
     /**
      * Convert an Object object into stream of bytes.
@@ -60,18 +96,6 @@ public class EFilesUtil {
             e.printStackTrace();
         }
         return s;
-    }
-
-    public static String format(double bytes, int digits) {
-        String[] dictionary = {"bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"};
-        int index = 0;
-        for (index = 0; index < dictionary.length; index++) {
-            if (bytes < 1024) {
-                break;
-            }
-            bytes = bytes / 1024;
-        }
-        return String.format("%." + digits + "f", bytes) + " " + dictionary[index];
     }
 
     public static int checkPositionInDirectory(long key, int globalDepth) {

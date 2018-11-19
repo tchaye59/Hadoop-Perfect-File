@@ -7,15 +7,22 @@
     <packaging>jar</packaging>
     
     <dependencies>
-        <dependency>
+        <!--        <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-mapreduce-client-core</artifactId>
             <version>2.9.1</version>
-        </dependency>
+        </dependency>-->
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
             <version>2.9.1</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.google.protobuf</groupId>
+                    <artifactId>protobuf-java</artifactId>
+                </exclusion>
+                 
+            </exclusions>
         </dependency>
         
         <dependency>
@@ -35,6 +42,11 @@
             <artifactId>hadoop-hdfs</artifactId>
             <version>2.9.1</version>
             <type>jar</type>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>ECache-Client</artifactId>
+            <version>${project.version}</version>
         </dependency>
     </dependencies>
     
