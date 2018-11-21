@@ -5,6 +5,9 @@
  */
 package net.almightshell.efiles;
 
+import eu.danieldk.dictomaton.DictionaryBuilder;
+import eu.danieldk.dictomaton.DictionaryBuilderException;
+import eu.danieldk.dictomaton.PerfectHashDictionary;
 import java.io.ByteArrayInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -14,6 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 import net.almightshell.ecache.client.ECacheClient;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -28,6 +32,7 @@ import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.io.IOUtils;
+import org.apache.hadoop.io.Text;
 
 /**
  *
@@ -37,6 +42,7 @@ public class EFile {
 
     private static final Log LOG = LogFactory.getLog(EFile.class);
     private static final String INDEX_NAME = "index-";
+    private static final String PERFECT_NAME = "perfect-";
     private static final String PART_NAME = "part-";
     private static final String METADATA_NAME = "metadata";
 
@@ -58,15 +64,21 @@ public class EFile {
     EFileMetadata metadata = new EFileMetadata();
     private Path currentDataPartPath = null;
     private ECacheClient cacheClient = null;
+    private boolean cacheEnabled = true;
+    private boolean perfectModeEnabled = false;
+    PerfectTableHolder perfectTableHolder = null;
 
     private EFile(Configuration conf, Path filePath, boolean newFile) throws IOException, Exception {
         this.conf = conf;
         this.filePath = filePath;
         fs = FileSystem.get(conf);
 
-        if (metadata.isCacheEanabled()) {
-//            cacheClient = new ECacheClient(filePath.toString(), ECacheConstants.DEFAULT_PORT, "", true);
-            cacheClient = new ECacheClient(filePath.toString(), 8040, "", true);
+        if (isCacheEnabled()) {
+            cacheClient = new ECacheClient(filePath.toString(), 8040, "", true,false);
+        }
+
+        if (isPerfectModeEnabled()) {
+            perfectTableHolder = new PerfectTableHolder(fs);
         }
 
         if (newFile) {
@@ -177,14 +189,19 @@ public class EFile {
         BucketEntry entry = null;
 
         //get metadata from cache
-        if (metadata.isCacheEanabled()) {
+        if (isCacheEnabled()) {
             byte[] bt = cacheClient.get(name.hashCode());
             if (bt != null) {
                 entry = EFilesUtil.asWritable(bt, BucketEntry.class);
             }
         }
+
         if (entry == null) {
-            entry = getBucketEntry(name);
+            if (isPerfectModeEnabled()) {
+
+            } else {
+                entry = getBucketEntry(name);
+            }
         }
 
         if (entry == null) {
@@ -204,6 +221,15 @@ public class EFile {
         return new ByteArrayInputStream(b);
     }
 
+    /**
+     * A bucket of the hash function is represented by two files in HDFS
+     * (index-*, perfect-*). This function save by appending the information of
+     * a file in the corresponding bucket index file and save the file name hash
+     * in the perfect file.
+     *
+     * @param entry contain the file information
+     * @throws IOException
+     */
     private void addBucketEntry(BucketEntry entry) throws IOException {
         int key = entry.hashCode();
         Bucket bucket = metadata.getDirectory().getBucketByEntryKey(key);
@@ -213,6 +239,10 @@ public class EFile {
             entry.write(out);
             bucket.setSize(bucket.getSize() + 1);
         }
+        //write the hash key in the perfect file
+        try (FSDataOutputStream out = fs.append(bucket.getPerfectPath())) {
+            Text.writeString(out, String.valueOf(key));
+        }
 
         //split the bucket if full
         if (bucket.getSize() >= metadata.getBucketCapacity()) {
@@ -220,7 +250,7 @@ public class EFile {
         }
 
         //add metadata to cache
-        if (metadata.isCacheEanabled()) {
+        if (isCacheEnabled()) {
             cacheClient.put(key, EFilesUtil.serialize(entry));
         }
 
@@ -242,6 +272,22 @@ public class EFile {
             }
         }
         return null;
+    }
+
+    private List<BucketEntry> getBucketAllEntries(Bucket bucket) throws IOException {
+
+        List<BucketEntry> bucketEntrys = new ArrayList<>();
+        //read the index record
+        try (FSDataInputStream in = fs.open(bucket.getPath())) {
+
+            while (in.available() > 0) {
+                BucketEntry entry = new BucketEntry();
+                entry.readFields(in);
+
+                bucketEntrys.add(entry);
+            }
+        }
+        return bucketEntrys;
     }
 
     private void splitBucket(Bucket toSplitBucket, int key) throws IOException {
@@ -294,8 +340,10 @@ public class EFile {
         Bucket bucket = new Bucket();
         bucket.setLocalDepth(metadata.getDirectory().getGlobalDepth());
         bucket.setPath(new Path(filePath, INDEX_NAME + metadata.getIndexLabel()));
+        bucket.setPerfectPath(new Path(filePath, PERFECT_NAME + metadata.getIndexLabel()));
 
         fs.create(bucket.getPath(), false, conf.getInt(IO_FILE_BUFFER_SIZE_KEY, IO_FILE_BUFFER_SIZE_DEFAULT), metadata.getRepl(), indexBlockSize).close();
+        fs.create(bucket.getPerfectPath(), false, conf.getInt(IO_FILE_BUFFER_SIZE_KEY, IO_FILE_BUFFER_SIZE_DEFAULT), metadata.getRepl(), indexBlockSize).close();
 
         metadata.setIndexLabel(metadata.getIndexLabel() + 1);
         return bucket;
@@ -323,6 +371,22 @@ public class EFile {
                 metadata.readFields(in);
             }
         }
+    }
+
+    public boolean isCacheEnabled() {
+        return cacheEnabled;
+    }
+
+    public void setCacheEnabled(boolean cacheEnabled) {
+        this.cacheEnabled = cacheEnabled;
+    }
+
+    public boolean isPerfectModeEnabled() {
+        return perfectModeEnabled;
+    }
+
+    public void setPerfectModeEnabled(boolean perfectModeEnabled) {
+        this.perfectModeEnabled = perfectModeEnabled;
     }
 
     private Path getMetadataPath() {

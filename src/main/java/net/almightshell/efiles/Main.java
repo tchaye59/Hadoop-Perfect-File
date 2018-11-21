@@ -48,7 +48,7 @@ public class Main {
 
             EFile file = EFile.newFile(conf, new Path(hdfsUrl + "/file1"));
             file.putAllFilesFromDir(new Path(hdfsUrl + "/data"), true);
-            
+
             List<BucketEntry> list = file.listFiles();
 
             list.parallelStream().forEach(e -> {
@@ -59,7 +59,6 @@ public class Main {
                     Logger.getLogger(Main.class.getName()).log(Level.SEVERE, null, ex);
                 }
             });
-
         } catch (Exception ex) {
             ex.printStackTrace();
             //Logger.getLogger(Main.class.getName()).log(Level.SEVERE, null, ex);

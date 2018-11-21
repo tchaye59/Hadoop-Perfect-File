@@ -19,7 +19,6 @@ public class EFileMetadata implements Writable {
     private int bucketCapacity = 50;
     private int indexLabel = 0;
     private int partLabel = 0;
-    private boolean cacheEanabled = true;
     private String currentDataPart = null;
     /**
      * the desired replication degree; default is 3 *
@@ -39,7 +38,6 @@ public class EFileMetadata implements Writable {
         out.writeUTF(currentDataPart);
         out.writeShort(repl);
         directory.write(out);
-        out.writeBoolean(cacheEanabled);
     }
 
     @Override
@@ -50,7 +48,6 @@ public class EFileMetadata implements Writable {
         currentDataPart = in.readUTF();
         repl = in.readShort();
         directory.readFields(in);
-        cacheEanabled = in.readBoolean();
     }
 
     public int getBucketCapacity() {
@@ -95,14 +92,6 @@ public class EFileMetadata implements Writable {
 
     public Directory getDirectory() {
         return directory;
-    }
-
-    public boolean isCacheEanabled() {
-        return cacheEanabled;
-    }
-
-    public void setCacheEanabled(boolean cacheEanabled) {
-        this.cacheEanabled = cacheEanabled;
     }
 
     public void setDirectory(Directory directory) {

@@ -20,6 +20,7 @@ import org.apache.hadoop.io.Writable;
 public class Bucket implements Writable {
 
     private Path path;
+    private Path perfectPath;
     private int localDepth = 0;
     private int size = 0;
 
@@ -29,6 +30,7 @@ public class Bucket implements Writable {
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, path.toString());
+        Text.writeString(out, perfectPath.toString());
         out.writeInt(localDepth);
         out.writeInt(size);
     }
@@ -36,6 +38,7 @@ public class Bucket implements Writable {
     @Override
     public void readFields(DataInput in) throws IOException {
         path = new Path(Text.readString(in));
+        perfectPath = new Path(Text.readString(in));
         localDepth = in.readInt();
         size = in.readInt();
     }
@@ -62,6 +65,14 @@ public class Bucket implements Writable {
 
     public void setSize(int size) {
         this.size = size;
+    }
+
+    public Path getPerfectPath() {
+        return perfectPath;
+    }
+
+    public void setPerfectPath(Path perfectPath) {
+        this.perfectPath = perfectPath;
     }
 
     @Override
