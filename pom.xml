@@ -28,6 +28,11 @@
                 </exclusion>
             </exclusions>
         </dependency>
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-archives</artifactId>
+            <version>2.9.1</version>
+        </dependency>
         
         <dependency>
             <groupId>junit</groupId>
@@ -41,27 +46,35 @@
             <type>jar</type>
         </dependency>-->
         <dependency>
-            <groupId>${project.groupId}</groupId>
-            <artifactId>ECache-Client</artifactId>
-            <version>${project.version}</version>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>21.0</version>
         </dependency>
         <!--        <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>ECache-Client-Shaded</artifactId>
             <version>${project.version}</version>
         </dependency>-->
+        
     </dependencies>
     
     <repositories>
         <repository>
-            <id>cloudera</id>
-            <url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
+            <id>hadoop-archives</id>
+            <name>hadoop-archives</name>
+            <url>http://central.maven.org/maven2/</url>
         </repository>
+        
         <repository>
             <id>hadoop-hdfs</id>
             <name>hadoop-hdfs</name>
             <url>https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-hdfs</url>
         </repository>
+        <repository>
+            <id>cloudera</id>
+            <url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
+        </repository>
+        
         <repository>
             <id>hadoop</id>
             <name>org.apache.hadoop</name>

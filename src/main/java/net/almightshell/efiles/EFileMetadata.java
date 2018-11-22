@@ -16,7 +16,7 @@ import org.apache.hadoop.io.Writable;
  */
 public class EFileMetadata implements Writable {
 
-    private int bucketCapacity = 50;
+    private int bucketCapacity = 1000;
     private int indexLabel = 0;
     private int partLabel = 0;
     private String currentDataPart = null;
@@ -55,6 +55,9 @@ public class EFileMetadata implements Writable {
     }
 
     public void setBucketCapacity(int bucketCapacity) {
+        if (bucketCapacity<=0) {
+            return;
+        }
         this.bucketCapacity = bucketCapacity;
     }
 

@@ -22,7 +22,7 @@ public class Directory implements Writable {
 
     private List<Integer> directory = new ArrayList<>();
     private List<Bucket> buckets = new ArrayList<>();
-    private int globalDepth = 0;
+    private long globalDepth = 0;
 
     public Directory() {
     }
@@ -42,15 +42,15 @@ public class Directory implements Writable {
         globalDepth++;
     }
 
-    public int positionInDirectory(int hashCode) {
+    public long positionInDirectory(long hashCode) {
         return EFilesUtil.checkPositionInDirectory(hashCode, getGlobalDepth());
     }
 
-    public Bucket getBucket(int pos) {
-        return buckets.get(directory.get(pos));
+    public Bucket getBucket(long pos) {
+        return buckets.get(directory.get((int) pos));
     }
 
-    public Bucket getBucketByEntryKey(int key) {
+    public Bucket getBucketByEntryKey(long key) {
         return getBucket(positionInDirectory(key));
     }
 
@@ -63,7 +63,7 @@ public class Directory implements Writable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        out.writeInt(globalDepth);
+        out.writeLong(globalDepth);
         out.writeInt(directory.size());
         directory.stream().forEach((v) -> {
             try {
@@ -85,7 +85,7 @@ public class Directory implements Writable {
 
     @Override
     public void readFields(DataInput in) throws IOException {
-        globalDepth = in.readInt();
+        globalDepth = in.readLong();
 
         directory.clear();
         int size = in.readInt();
@@ -121,11 +121,11 @@ public class Directory implements Writable {
         this.buckets = buckets;
     }
 
-    public int getGlobalDepth() {
+    public long getGlobalDepth() {
         return globalDepth;
     }
 
-    public void setGlobalDepth(int globalDepth) {
+    public void setGlobalDepth(long globalDepth) {
         this.globalDepth = globalDepth;
     }
 

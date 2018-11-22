@@ -5,6 +5,9 @@
  */
 package net.almightshell.efiles;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.google.protobuf.ByteString;
 import eu.danieldk.dictomaton.DictionaryBuilder;
 import eu.danieldk.dictomaton.DictionaryBuilderException;
 import eu.danieldk.dictomaton.PerfectHashDictionary;
@@ -15,10 +18,10 @@ import java.io.InputStream;
 import java.nio.file.FileSystemException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
-import net.almightshell.ecache.client.ECacheClient;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -27,12 +30,15 @@ import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IO_FILE_BUFFER_
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileAlreadyExistsException;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
+import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.Writable;
 
 /**
  *
@@ -63,18 +69,23 @@ public class EFile {
 
     EFileMetadata metadata = new EFileMetadata();
     private Path currentDataPartPath = null;
-    private ECacheClient cacheClient = null;
+    private Cache<Integer, BucketEntry> cache = null;
     private boolean cacheEnabled = true;
     private boolean perfectModeEnabled = false;
     PerfectTableHolder perfectTableHolder = null;
 
-    private EFile(Configuration conf, Path filePath, boolean newFile) throws IOException, Exception {
+    private EFile(Configuration conf, Path filePath, int bucketCapacity, boolean newFile, boolean cacheEnabled, boolean perfectModeEnabled) throws IOException, Exception {
         this.conf = conf;
         this.filePath = filePath;
+        this.cacheEnabled = cacheEnabled;
+        this.perfectModeEnabled = perfectModeEnabled;
         fs = FileSystem.get(conf);
 
         if (isCacheEnabled()) {
-            cacheClient = new ECacheClient(filePath.toString(), 8040, "", true,false);
+            cache = CacheBuilder.newBuilder()
+                    .maximumSize(10000)
+                    .expireAfterWrite(24, TimeUnit.HOURS)
+                    .build();
         }
 
         if (isPerfectModeEnabled()) {
@@ -90,6 +101,7 @@ public class EFile {
             metadata.getDirectory().init(newBucket());
             this.currentDataPartPath = newPartFilePath();
             metadata.setCurrentDataPartPath(currentDataPartPath.getName());
+            metadata.setBucketCapacity(bucketCapacity);
             writeMetadata();
         } else {
             if (!fs.exists(filePath)) {
@@ -98,34 +110,75 @@ public class EFile {
             readMetadata();
             currentDataPartPath = new Path(filePath, metadata.getCurrentDataPartPath());
         }
+        metadata.setBucketCapacity(bucketCapacity);
+    }
+
+    public static EFile newFile(Configuration conf, Path filePath, int bucketCapacity, boolean cacheEnabled, boolean perfectModeEnabled) throws IOException, Exception {
+        return new EFile(conf, filePath, bucketCapacity, true, cacheEnabled, perfectModeEnabled);
+    }
+
+    public static EFile newFile(Configuration conf, Path filePath, int bucketCapacity) throws IOException, Exception {
+        return new EFile(conf, filePath, bucketCapacity, true, false, false);
+    }
+
+    public static EFile newFile(Configuration conf, Path filePath, boolean cacheEnabled) throws IOException, Exception {
+        return new EFile(conf, filePath, -1, true, cacheEnabled, false);
     }
 
     public static EFile newFile(Configuration conf, Path filePath) throws IOException, Exception {
-        return new EFile(conf, filePath, true);
+        return new EFile(conf, filePath, -1, true, false, false);
+    }
+
+    public static EFile open(Configuration conf, Path filePath, int bucketCapacity, boolean cacheEnabled, boolean perfectModeEnabled) throws IOException, Exception {
+        return new EFile(conf, filePath, bucketCapacity, false, cacheEnabled, perfectModeEnabled);
+    }
+
+    public static EFile open(Configuration conf, Path filePath, int bucketCapacity) throws IOException, Exception {
+        return new EFile(conf, filePath, bucketCapacity, false, false, false);
+    }
+
+    public static EFile open(Configuration conf, Path filePath, int bucketCapacity, boolean cacheEnabled) throws IOException, Exception {
+        return new EFile(conf, filePath, bucketCapacity, false, cacheEnabled, false);
+    }
+
+    public static EFile open(Configuration conf, Path filePath, boolean cacheEnabled) throws IOException, Exception {
+        return new EFile(conf, filePath, -1, false, cacheEnabled, false);
     }
 
     public static EFile open(Configuration conf, Path filePath) throws IOException, Exception {
-        return new EFile(conf, filePath, false);
+        return new EFile(conf, filePath, -1, false, false, false);
     }
 
-    private void put(FSDataOutputStream out, Path path) throws IOException {
-
+    private void put(FSDataOutputStream out, long key, Writable writable) throws IOException {
         //Build index record
         BucketEntry entry = new BucketEntry();
-        entry.setFileName(path.getName());
-        entry.setSize((int) fs.getFileStatus(path).getLen());
+        entry.setFileName(key + "");
         entry.setParteFileName(currentDataPartPath.getName());
         entry.setOffset((int) out.getPos());
 
-        //
+        //copy the writable content
+        writable.write(out);
+
+        addBucketEntry(entry);
+    }
+
+    private void put(FSDataOutputStream out, FileStatus status) throws IOException {
+
+        //Build index record
+        BucketEntry entry = new BucketEntry();
+        entry.setFileName(status.getPath().getName());
+        entry.setParteFileName(currentDataPartPath.getName());
+        entry.setOffset((int) out.getPos());
+
         if (entry.getSize() > blockSize) {
-            throw new FileSystemException(path.getName() + " is not a small. The file size is too big");
+            throw new FileSystemException(status.getPath().getName() + " is not a small. The file size is too big");
         }
 
         //copy the file content
-        try (FSDataInputStream in = fs.open(path)) {
+        try (FSDataInputStream in = fs.open(status.getPath())) {
             IOUtils.copyBytes(in, out, conf, false);
         }
+        entry.setSize((int) (out.getPos() - entry.getOffset()));
         addBucketEntry(entry);
     }
 
@@ -136,33 +189,36 @@ public class EFile {
         }
 
         try (FSDataOutputStream out = fs.append(currentDataPartPath)) {
-            put(out, path);
+            put(out, fs.getFileStatus(path));
+        }
+        writeMetadata();
+    }
+
+    public void put(long entryKey, Writable writable) throws IOException {
+        if (fs.getUsed(currentDataPartPath) >= partMaxSize) {
+            currentDataPartPath = newPartFilePath();
+            metadata.setCurrentDataPartPath(currentDataPartPath.getName());
+        }
+
+        try (FSDataOutputStream out = fs.append(currentDataPartPath)) {
+            put(out, entryKey, writable);
         }
         writeMetadata();
     }
 
     public void putAllFilesFromDir(Path dirpath, boolean recursive) throws IOException {
-        RemoteIterator<LocatedFileStatus> it = fs.listFiles(dirpath, recursive);
+        FileStatus[] fses = fs.listStatus(dirpath);
 
-        FSDataOutputStream out = fs.append(currentDataPartPath);
+        if (fs.getUsed(currentDataPartPath) >= partMaxSize) {
+            currentDataPartPath = newPartFilePath();
+            metadata.setCurrentDataPartPath(currentDataPartPath.getName());
+        }
 
-        while (it.hasNext()) {
-            //check if the used part file reaches the max size
-            if (fs.getUsed(currentDataPartPath) >= partMaxSize) {
-                currentDataPartPath = newPartFilePath();
-                metadata.setCurrentDataPartPath(currentDataPartPath.getName());
-
-                out.close();
-                out = fs.append(currentDataPartPath);
-            }
-
-            LocatedFileStatus lfs = it.next();
-
-            if (lfs.isFile()) {
-                put(out, lfs.getPath());
+        try (FSDataOutputStream out = fs.append(currentDataPartPath)) {
+            for (FileStatus fse : fses) {
+                put(out, fse);
             }
         }
-        out.close();
         writeMetadata();
     }
 
@@ -190,10 +246,7 @@ public class EFile {
 
         //get metadata from cache
         if (isCacheEnabled()) {
-            byte[] bt = cacheClient.get(name.hashCode());
-            if (bt != null) {
-                entry = EFilesUtil.asWritable(bt, BucketEntry.class);
-            }
+            entry = cache.getIfPresent((int) name.hashCode());
         }
 
         if (entry == null) {
@@ -207,6 +260,7 @@ public class EFile {
         if (entry == null) {
             throw new FileNotFoundException(name + " not found in " + filePath.getName());
         }
+        cache.put(entry.getFileName().hashCode(), entry);
 
         return get(entry);
     }
@@ -251,15 +305,13 @@ public class EFile {
 
         //add metadata to cache
         if (isCacheEnabled()) {
-            cacheClient.put(key, EFilesUtil.serialize(entry));
+            cache.put(entry.getFileName().hashCode(), entry);
         }
-
     }
 
     private BucketEntry getBucketEntry(String name) throws IOException {
 
-        int position = metadata.getDirectory().positionInDirectory(name.hashCode());
-        Bucket bucket = metadata.getDirectory().getBucket(position);
+        Bucket bucket = metadata.getDirectory().getBucketByEntryKey(name.hashCode());
 
         //read the index record
         try (FSDataInputStream in = fs.open(bucket.getPath())) {
@@ -290,7 +342,7 @@ public class EFile {
         return bucketEntrys;
     }
 
-    private void splitBucket(Bucket toSplitBucket, int key) throws IOException {
+    private void splitBucket(Bucket toSplitBucket, long key) throws IOException {
         Bucket newBucket = newBucket();
 
         if (toSplitBucket.getLocalDepth() == metadata.getDirectory().getGlobalDepth()) {
@@ -315,7 +367,7 @@ public class EFile {
                 BucketEntry entry = new BucketEntry();
                 entry.readFields(in);
 
-                p = metadata.getDirectory().positionInDirectory(entry.hashCode());
+                p = (int) metadata.getDirectory().positionInDirectory(entry.hashCode());
                 if (p == pos2) {
                     entry.write(newOut);
                     newBucket.setSize(newBucket.getSize() + 1);

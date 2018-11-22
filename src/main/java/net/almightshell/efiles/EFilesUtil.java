@@ -98,15 +98,19 @@ public class EFilesUtil {
         return s;
     }
 
-    public static int checkPositionInDirectory(long key, int globalDepth) {
-        String s = Long.toBinaryString(key);
-        s = s.substring(s.length() - globalDepth, s.length());
-        return s.isEmpty() ? 0 : new BigInteger(s, 2).intValue();
+    public static long checkPositionInDirectory(long key, long globalDepth) {
+        if (globalDepth <= 0) {
+            return 0;
+        }
+        return key << -globalDepth >>> -globalDepth;
+//        String s = Long.toBinaryString(key);
+//        s = s.substring(s.length() - globalDepth, s.length());
+//        return s.isEmpty() ? 0 : new BigInteger(s, 2).intValue();
     }
 
-    public static int[] checkSplitPositionsInDirectory(long key, int globalDepth) {
+    public static int[] checkSplitPositionsInDirectory(long key, long globalDepth) {
         String s = Long.toBinaryString(key);
-        s = s.substring(s.length() - globalDepth, s.length());
+        s = s.substring((int) (s.length() - globalDepth), s.length());
 
         StringBuilder sb = new StringBuilder(s);
         sb.setCharAt(0, '0');

@@ -21,7 +21,7 @@ public class Bucket implements Writable {
 
     private Path path;
     private Path perfectPath;
-    private int localDepth = 0;
+    private long localDepth = 0;
     private int size = 0;
 
     public Bucket() {
@@ -31,7 +31,7 @@ public class Bucket implements Writable {
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, path.toString());
         Text.writeString(out, perfectPath.toString());
-        out.writeInt(localDepth);
+        out.writeLong(localDepth);
         out.writeInt(size);
     }
 
@@ -39,7 +39,7 @@ public class Bucket implements Writable {
     public void readFields(DataInput in) throws IOException {
         path = new Path(Text.readString(in));
         perfectPath = new Path(Text.readString(in));
-        localDepth = in.readInt();
+        localDepth = in.readLong();
         size = in.readInt();
     }
 
@@ -51,11 +51,11 @@ public class Bucket implements Writable {
         this.path = path;
     }
 
-    public int getLocalDepth() {
+    public long getLocalDepth() {
         return localDepth;
     }
 
-    public void setLocalDepth(int localDepth) {
+    public void setLocalDepth(long localDepth) {
         this.localDepth = localDepth;
     }
 
