@@ -9,6 +9,7 @@ import eu.danieldk.dictomaton.DictionaryBuilder;
 import eu.danieldk.dictomaton.DictionaryBuilderException;
 import eu.danieldk.dictomaton.PerfectHashDictionary;
 import java.io.IOException;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -24,9 +25,10 @@ public class PerfectTableHolder {
 
     HashMap<String, PerfectHashDictionary> map = new HashMap<>();
     FileSystem fs = null;
+    private PerfectFile pFile = null;
 
-    public PerfectTableHolder(FileSystem fs) {
-        this.fs = fs;
+    PerfectTableHolder(PerfectFile pFile) {
+        this.pFile = pFile;
     }
 
     /**
@@ -40,7 +42,7 @@ public class PerfectTableHolder {
      * @throws DictionaryBuilderException
      */
     public int get(Bucket bucket, int entryHash) throws IOException, DictionaryBuilderException {
-        String dicName = bucket.getPerfectPath().getName();
+        String dicName = bucket.getPath2().getName();
         if (!map.containsKey(dicName)) {
             return reloadBucketDictionary(bucket).number(entryHash + "");
         }
@@ -60,10 +62,10 @@ public class PerfectTableHolder {
      * @throws DictionaryBuilderException
      */
     private PerfectHashDictionary reloadBucketDictionary(Bucket bucket) throws IOException, DictionaryBuilderException {
-        PerfectHashDictionary dic = new DictionaryBuilder().addAll(getAllPerfectEntries(bucket)).buildPerfectHash();
-        map.put(bucket.getPerfectPath().getName(), dic);
-        //Call the garbage collector
-        System.gc();
+        pFile.readMetadata();
+        PerfectHashDictionary dic = new DictionaryBuilder().addAll(getAllFileNamesFromBucket(bucket)).buildPerfectHash();
+        map.put(bucket.getPath2().getName(), dic);
+        pFile.writeMetadata();
         return dic;
     }
 
@@ -74,15 +76,25 @@ public class PerfectTableHolder {
      * @return
      * @throws IOException
      */
-    private List<String> getAllPerfectEntries(Bucket bucket) throws IOException {
+    private List<String> getAllFileNamesFromBucket(Bucket bucket) throws IOException {
         List<String> strings = new ArrayList<>();
         //read the perfect file  records
-        try (FSDataInputStream in = fs.open(bucket.getPerfectPath())) {
+        try (FSDataInputStream in = fs.open(bucket.getPath2())) {
             while (in.available() > 0) {
-                strings.add(Text.readString(in));
+                BucketEntry2 entry2 = new BucketEntry2();
+                entry2.readFields(in);
+                strings.add(entry2.getFileName());
             }
         }
         return strings;
+    }
+
+    public HashMap<String, PerfectHashDictionary> getMap() {
+        return map;
+    }
+
+    public void setMap(HashMap<String, PerfectHashDictionary> map) {
+        this.map = map;
     }
 
 }

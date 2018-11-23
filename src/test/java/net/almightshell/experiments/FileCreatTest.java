@@ -44,5 +44,18 @@ public class FileCreatTest {
         FileCreat fc = new FileCreat(fs, conf, 135);
         fc.process();
     }
+    
+//    @Test
+//    public void testCreat() throws Exception {
+//        Configuration conf = new Configuration();
+//        conf.set("fs.defaultFS", hdfsUrl);
+//        conf.set("fs.hdfs.impl", DistributedFileSystem.class.getName());
+//        conf.set("fs.file.impl", LocalFileSystem.class.getName());
+//        conf.setBoolean("dfs.support.append", true);
+//        FileSystem fs = FileSystem.get(conf);
+//
+//        FileCreat fc = new FileCreat(fs, conf, 135);
+//        fc.processEH();
+//    }
 
 }

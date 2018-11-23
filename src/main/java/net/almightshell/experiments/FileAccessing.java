@@ -15,7 +15,7 @@ import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.List;
 import static junit.framework.Assert.assertTrue;
-import net.almightshell.efiles.EFile;
+import net.almightshell.efiles.PerfectFile;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -47,7 +47,7 @@ public class FileAccessing {
     List<String> fileNameList = new ArrayList<>();
     List<String> fileNameSubList = new ArrayList<>();
 
-    EFile ef = null;
+    PerfectFile ef = null;
 
     public FileAccessing(FileSystem fs, Configuration conf, int fileNumber) throws IOException {
         this.fs = fs;
@@ -166,7 +166,7 @@ public class FileAccessing {
         file.mkdirs();
 
         if (ef == null) {
-            ef = EFile.open(conf, new Path(resultPath + "/Ehfile-" + fileNumber),true);
+            ef = PerfectFile.open(conf, new Path(resultPath + "/Ehfile-" + fileNumber),true);
         }
 
         long currentTimeMillis = System.currentTimeMillis();

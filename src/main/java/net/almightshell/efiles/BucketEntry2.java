@@ -17,27 +17,18 @@ import org.apache.hadoop.io.Writable;
  *
  * @author Shell
  */
-public class BucketEntry implements Serializable, Writable {
+public class BucketEntry2 implements Serializable, Writable {
 
     private String fileName;
-    private String parteFileName;
-    private int offset;
-    private int size;
 
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, fileName);
-        Text.writeString(out, parteFileName);
-        out.writeInt(offset);
-        out.writeInt(size);
     }
 
     @Override
     public void readFields(DataInput in) throws IOException {
         fileName = Text.readString(in);
-        parteFileName = Text.readString(in);
-        offset = in.readInt();
-        size = in.readInt();
     }
 
     public String getFileName() {
@@ -46,30 +37,6 @@ public class BucketEntry implements Serializable, Writable {
 
     public void setFileName(String fileName) {
         this.fileName = fileName;
-    }
-
-    public String getParteFileName() {
-        return parteFileName;
-    }
-
-    public void setParteFileName(String parteFileName) {
-        this.parteFileName = parteFileName;
-    }
-
-    public int getOffset() {
-        return offset;
-    }
-
-    public void setOffset(int offset) {
-        this.offset = offset;
-    }
-
-    public int getSize() {
-        return size;
-    }
-
-    public void setSize(int size) {
-        this.size = size;
     }
 
     @Override
@@ -88,7 +55,7 @@ public class BucketEntry implements Serializable, Writable {
         if (getClass() != obj.getClass()) {
             return false;
         }
-        final BucketEntry other = (BucketEntry) obj;
+        final BucketEntry2 other = (BucketEntry2) obj;
         if (!Objects.equals(this.fileName, other.fileName)) {
             return false;
         }
@@ -97,7 +64,7 @@ public class BucketEntry implements Serializable, Writable {
 
     @Override
     public String toString() {
-        return "BucketEntry{" + "fileName=" + fileName + ", parteFileName=" + parteFileName + ", offset=" + offset + ", size=" + size + '}';
+        return "BucketEntry2{" + "fileName=" + fileName + '}';
     }
 
 }

@@ -19,8 +19,8 @@ import org.apache.hadoop.io.Writable;
  */
 public class Bucket implements Writable {
 
-    private Path path;
-    private Path perfectPath;
+    private Path path1;
+    private Path path2;
     private long localDepth = 0;
     private int size = 0;
 
@@ -29,26 +29,26 @@ public class Bucket implements Writable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        Text.writeString(out, path.toString());
-        Text.writeString(out, perfectPath.toString());
+        Text.writeString(out, path1.toString());
+        Text.writeString(out, path2.toString());
         out.writeLong(localDepth);
         out.writeInt(size);
     }
 
     @Override
     public void readFields(DataInput in) throws IOException {
-        path = new Path(Text.readString(in));
-        perfectPath = new Path(Text.readString(in));
+        path1 = new Path(Text.readString(in));
+        path2 = new Path(Text.readString(in));
         localDepth = in.readLong();
         size = in.readInt();
     }
 
-    public Path getPath() {
-        return path;
+    public Path getPath1() {
+        return path1;
     }
 
-    public void setPath(Path path) {
-        this.path = path;
+    public void setPath1(Path path1) {
+        this.path1 = path1;
     }
 
     public long getLocalDepth() {
@@ -67,18 +67,18 @@ public class Bucket implements Writable {
         this.size = size;
     }
 
-    public Path getPerfectPath() {
-        return perfectPath;
+    public Path getPath2() {
+        return path2;
     }
 
-    public void setPerfectPath(Path perfectPath) {
-        this.perfectPath = perfectPath;
+    public void setPath2(Path path2) {
+        this.path2 = path2;
     }
 
     @Override
     public int hashCode() {
         int hash = 3;
-        hash = 67 * hash + Objects.hashCode(this.path);
+        hash = 67 * hash + Objects.hashCode(this.path1);
         return hash;
     }
 
@@ -95,12 +95,12 @@ public class Bucket implements Writable {
         }
         final Bucket other = (Bucket) obj;
 
-        return path.getName().equals(other.path.getName());
+        return path1.getName().equals(other.path1.getName());
     }
 
     @Override
     public String toString() {
-        return "Bucket{" + "path=" + path + ", localDepth=" + localDepth + ", size=" + size + '}';
+        return "Bucket{" + "path=" + path1 + ", localDepth=" + localDepth + ", size=" + size + '}';
     }
 
 }

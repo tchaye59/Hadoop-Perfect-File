@@ -10,7 +10,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintWriter;
 import static junit.framework.Assert.assertTrue;
-import net.almightshell.efiles.EFile;
+import net.almightshell.efiles.PerfectFile;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 
@@ -56,12 +56,14 @@ public class FileCreat {
             writer.println("Data Size : " + fileNumber);
 
             long time = 0;
+            
+            time = processHDFS();
+            writer.println("HDFS : " + time + " ms");
 
             time = processEH();
             writer.println("EFile : " + time + " ms");
 
-            time = processHDFS();
-            writer.println("HDFS : " + time + " ms");
+            
 
             time = processHAR();
             writer.println("HAR : " + time + " ms");
@@ -151,10 +153,10 @@ public class FileCreat {
             fs.delete(path, true);
         }
 
-        EFile ef = EFile.newFile(conf, path,10);
+        PerfectFile ef = PerfectFile.newFile(conf, path,500);
 
         long currentTimeMillis = System.currentTimeMillis();
-        ef.putAllFilesFromDir(new Path(dataPath + "/" + fileNumber), true);
+        ef.putAll(new Path(dataPath + "/" + fileNumber), true);
         long time = System.currentTimeMillis() - currentTimeMillis;
         System.out.println("processEH : " + time);
         return time;

@@ -43,7 +43,7 @@ public class Directory implements Writable {
     }
 
     public long positionInDirectory(long hashCode) {
-        return EFilesUtil.checkPositionInDirectory(hashCode, getGlobalDepth());
+        return PerfectFilesUtil.checkPositionInDirectory(hashCode, getGlobalDepth());
     }
 
     public Bucket getBucket(long pos) {

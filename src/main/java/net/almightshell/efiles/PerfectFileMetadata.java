@@ -8,17 +8,19 @@ package net.almightshell.efiles;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import org.apache.hadoop.io.BytesWritable;
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Writable;
 
 /**
  *
  * @author Shell
  */
-public class EFileMetadata implements Writable {
+public class PerfectFileMetadata implements Writable {
 
     private int bucketCapacity = 1000;
-    private int indexLabel = 0;
-    private int partLabel = 0;
+    private int indexLastPosition = -1;
+    private int usedPartFilePosition = -1;
     private String currentDataPart = null;
     /**
      * the desired replication degree; default is 3 *
@@ -26,28 +28,51 @@ public class EFileMetadata implements Writable {
     private short repl = 1;
 
     private Directory directory = new Directory();
+    private PerfectTableHolder perfectTableHolder = null;
+    private PerfectFile pFile = null;
 
-    public EFileMetadata() {
+    public PerfectFileMetadata(PerfectFile pFile, boolean perfectModeEnabled) {
+        this.pFile = pFile;
+        if (perfectModeEnabled) {
+            perfectTableHolder = new PerfectTableHolder(pFile);
+        }
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
         out.writeInt(bucketCapacity);
-        out.writeInt(indexLabel);
-        out.writeInt(partLabel);
+        out.writeInt(indexLastPosition);
+        out.writeInt(usedPartFilePosition);
         out.writeUTF(currentDataPart);
         out.writeShort(repl);
         directory.write(out);
+        
+        BytesWritable bw = new BytesWritable();
+        if (perfectTableHolder != null) {
+            bw.set(new BytesWritable(PerfectFilesUtil.toObjectStream(new PerfectHashDictionaryBean(perfectTableHolder.getMap()))));
+        }
+        bw.write(out);
     }
 
     @Override
     public void readFields(DataInput in) throws IOException {
         bucketCapacity = in.readInt();
-        indexLabel = in.readInt();
-        partLabel = in.readInt();
+        indexLastPosition = in.readInt();
+        usedPartFilePosition = in.readInt();
         currentDataPart = in.readUTF();
         repl = in.readShort();
         directory.readFields(in);
+
+        BytesWritable bw = new BytesWritable();
+        bw.readFields(in);
+
+        if (perfectTableHolder != null) {
+            try {
+                perfectTableHolder.setMap(PerfectFilesUtil.toObject(bw.getBytes(), PerfectHashDictionaryBean.class).getMap());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     public int getBucketCapacity() {
@@ -55,7 +80,7 @@ public class EFileMetadata implements Writable {
     }
 
     public void setBucketCapacity(int bucketCapacity) {
-        if (bucketCapacity<=0) {
+        if (bucketCapacity <= 0) {
             return;
         }
         this.bucketCapacity = bucketCapacity;
@@ -69,20 +94,20 @@ public class EFileMetadata implements Writable {
         this.repl = repl;
     }
 
-    public int getIndexLabel() {
-        return indexLabel;
+    public int getIndexLastPosition() {
+        return indexLastPosition;
     }
 
-    public void setIndexLabel(int indexLabel) {
-        this.indexLabel = indexLabel;
+    public void setIndexLastPosition(int indexLastPosition) {
+        this.indexLastPosition = indexLastPosition;
     }
 
-    public int getPartLabel() {
-        return partLabel;
+    public int getUsedPartFilePosition() {
+        return usedPartFilePosition;
     }
 
-    public void setPartLabel(int partLabel) {
-        this.partLabel = partLabel;
+    public void setUsedPartFilePosition(int usedPartFilePosition) {
+        this.usedPartFilePosition = usedPartFilePosition;
     }
 
     public String getCurrentDataPartPath() {

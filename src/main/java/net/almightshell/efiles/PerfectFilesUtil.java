@@ -21,7 +21,7 @@ import org.apache.hadoop.io.Writable;
  *
  * @author Shell
  */
-public class EFilesUtil {
+public class PerfectFilesUtil {
 
     public static byte[] serialize(Writable writable) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -79,15 +79,17 @@ public class EFilesUtil {
     /**
      * Convert stream of bytes to Object.
      *
+     * @param <T>
      * @param stream byte array
+     * @param clazz
      * @return Student object
      */
-    public static Serializable toObject(byte[] stream) {
-        Serializable s = null;
+    public static <T extends Serializable> T  toObject(byte[] stream,Class<T> clazz) {
+        T s = null;
 
         try (ByteArrayInputStream bais = new ByteArrayInputStream(stream);
                 ObjectInputStream ois = new ObjectInputStream(bais);) {
-            s = (Serializable) ois.readObject();
+            s =  (T) ois.readObject();
         } catch (IOException e) {
             // Error in de-serialization
             e.printStackTrace();
