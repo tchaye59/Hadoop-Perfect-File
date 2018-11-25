@@ -3,14 +3,11 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package net.almightshell.efiles;
+package net.almightshell.pf;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
-import com.google.protobuf.ByteString;
-import eu.danieldk.dictomaton.DictionaryBuilder;
 import eu.danieldk.dictomaton.DictionaryBuilderException;
-import eu.danieldk.dictomaton.PerfectHashDictionary;
 import java.io.ByteArrayInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -21,7 +18,6 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.stream.Collectors;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -32,13 +28,8 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileAlreadyExistsException;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.io.BytesWritable;
-import org.apache.hadoop.io.DataOutputBuffer;
-import org.apache.hadoop.io.IOUtils;
-import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 
 /**
@@ -49,7 +40,6 @@ public class PerfectFile {
 
     private static final Log LOG = LogFactory.getLog(PerfectFile.class);
     private static final String INDEX_NAME = "index-";
-    private static final String PERFECT_NAME = "perfect-";
     private static final String PART_NAME = "part-";
     private static final String METADATA_NAME = "metadata";
 
@@ -70,7 +60,7 @@ public class PerfectFile {
 
     PerfectFileMetadata metadata = null;
     private Path currentDataPartPath = null;
-    private Cache<Long, BucketEntry1> cache = null;
+    private Cache<Long, BucketEntry> cache = null;
     private boolean cacheEnabled = true;
     private boolean perfectModeEnabled = false;
 
@@ -131,6 +121,10 @@ public class PerfectFile {
         return new PerfectFile(conf, filePath, bucketCapacity, false, cacheEnabled, perfectModeEnabled);
     }
 
+    public static PerfectFile open(Configuration conf, Path filePath, boolean cacheEnabled, boolean perfectModeEnabled) throws IOException, Exception {
+        return new PerfectFile(conf, filePath, -1, false, cacheEnabled, perfectModeEnabled);
+    }
+
     public static PerfectFile open(Configuration conf, Path filePath, int bucketCapacity) throws IOException, Exception {
         return new PerfectFile(conf, filePath, bucketCapacity, false, false, false);
     }
@@ -140,7 +134,7 @@ public class PerfectFile {
     }
 
     public static PerfectFile open(Configuration conf, Path filePath, boolean cacheEnabled) throws IOException, Exception {
-        return new PerfectFile(conf, filePath, -1, false, cacheEnabled, false);
+        return new PerfectFile(conf, filePath, -1, false, cacheEnabled, true);
     }
 
     public static PerfectFile open(Configuration conf, Path filePath) throws IOException, Exception {
@@ -148,18 +142,15 @@ public class PerfectFile {
     }
 
     private synchronized void put(FSDataOutputStream out, String key, Writable writable) throws IOException {
-        BucketEntry1 entry1 = new BucketEntry1();
-        entry1.setFileNameHash(getHash(key));
+        BucketEntry entry1 = new BucketEntry();
+        entry1.setFileNameHash(PerfectFilesUtil.getHash(key));
         entry1.setPartFilePosition(metadata.getUsedPartFilePosition());
         entry1.setOffset((int) out.getPos());
-
-        BucketEntry2 entry2 = new BucketEntry2();
-        entry2.setFileName(key);
 
         //copy the file content
         writable.write(out);
         entry1.setSize((int) (out.getPos() - entry1.getOffset()));
-        addBucketEntry(entry1, entry2);
+        addBucketEntry(entry1);
     }
 
     private void put(FSDataOutputStream out, FileStatus status) throws IOException {
@@ -172,7 +163,7 @@ public class PerfectFile {
         put(out, status.getPath().getName(), new BytesWritable(bs));
     }
 
-    public void put(Path path) throws IOException {
+    public void put(Path path) throws IOException, DictionaryBuilderException {
         if (fs.getUsed(currentDataPartPath) >= partMaxSize) {
             currentDataPartPath = newPartFile();
             metadata.setCurrentDataPartPath(currentDataPartPath.getName());
@@ -181,22 +172,15 @@ public class PerfectFile {
         try (FSDataOutputStream out = fs.append(currentDataPartPath)) {
             put(out, fs.getFileStatus(path));
         }
-        writeMetadata();
-    }
 
-    public void put(String key, Writable writable) throws IOException {
-        if (fs.getUsed(currentDataPartPath) >= partMaxSize) {
-            currentDataPartPath = newPartFile();
-            metadata.setCurrentDataPartPath(currentDataPartPath.getName());
-        }
-
-        try (FSDataOutputStream out = fs.append(currentDataPartPath)) {
-            put(out, key, writable);
+        List<Bucket> buckets = flushBucketsData();
+        for (Bucket bucket : buckets) {
+            metadata.getPerfectTableHolder().reloadBucketDictionary(bucket);
         }
         writeMetadata();
     }
 
-    public void putAll(Path dirpath, boolean recursive) throws IOException {
+    public void putAll(Path dirpath, boolean recursive) throws IOException, DictionaryBuilderException {
         FileStatus[] fses = fs.listStatus(dirpath);
 
         try (FSDataOutputStream out = fs.append(currentDataPartPath)) {
@@ -204,24 +188,30 @@ public class PerfectFile {
                 currentDataPartPath = newPartFile();
                 metadata.setCurrentDataPartPath(currentDataPartPath.getName());
             }
+
             for (FileStatus fse : fses) {
                 put(out, fse);
             }
         }
+        List<Bucket> buckets = flushBucketsData();
+        for (Bucket bucket : buckets) {
+            metadata.getPerfectTableHolder().reloadBucketDictionary(bucket);
+        }
         writeMetadata();
     }
 
-    public List<BucketEntry1> listFiles() throws IOException {
+    public List<BucketEntry> listFiles() throws IOException {
 
-        List<BucketEntry1> files = new ArrayList<>();
+        List<BucketEntry> files = new ArrayList<>();
         metadata.getDirectory().getBuckets().stream().forEach(bucket -> {
-            try (FSDataInputStream in = fs.open(bucket.getPath1())) {
+            try (FSDataInputStream in = fs.open(bucket.getPath())) {
 
                 while (in.available() > 0) {
-                    BucketEntry1 entry = new BucketEntry1();
+                    BucketEntry entry = new BucketEntry();
                     entry.readFields(in);
                     files.add(entry);
                 }
+
             } catch (IOException ex) {
                 Logger.getLogger(PerfectFile.class.getName()).log(Level.SEVERE, null, ex);
             }
@@ -230,32 +220,35 @@ public class PerfectFile {
         return files;
     }
 
-    public InputStream get(String key) throws IOException {
-        BucketEntry1 entry1 = null;
-        long keyHash = getHash(key);
+    public InputStream get(String key) throws IOException, DictionaryBuilderException {
+        BucketEntry be = null;
+        long keyHash = PerfectFilesUtil.getHash(key);
 
         //get metadata from cache
         if (isCacheEnabled()) {
-            entry1 = cache.getIfPresent(keyHash);
+            be = cache.getIfPresent(keyHash);
         }
 
-        if (entry1 == null) {
+        if (be == null) {
             if (isPerfectModeEnabled()) {
-
+                be = getEntryFromBucketByPerfectTable(keyHash);
             } else {
-                entry1 = getBucketEntry(keyHash);
+                be = getEntryFromBucket(keyHash);
             }
         }
 
-        if (entry1 == null) {
+        if (be == null) {
             throw new FileNotFoundException(key + " not found in " + filePath.getName());
         }
-        cache.put(keyHash, entry1);
 
-        return get(entry1);
+        if (isCacheEnabled()) {
+            cache.put(keyHash, be);
+        }
+
+        return get(be);
     }
 
-    public InputStream get(BucketEntry1 entry) throws IOException {
+    public InputStream get(BucketEntry entry) throws IOException {
         byte[] b = new byte[entry.getSize()];
         try (FSDataInputStream in = fs.open(getPartFilePath(entry.getPartFilePosition()))) {
             in.seek(entry.getOffset());
@@ -275,18 +268,12 @@ public class PerfectFile {
      *
      * @throws IOException
      */
-    private synchronized void addBucketEntry(BucketEntry1 entry1, BucketEntry2 entry2) throws IOException {
+    private synchronized void addBucketEntry(BucketEntry entry1) throws IOException {
         Bucket bucket = metadata.getDirectory().getBucketByEntryKey(entry1.getFileNameHash());
 
-        //write the index record
-        try (FSDataOutputStream out = fs.append(bucket.getPath1())) {
-            entry1.write(out);
-            bucket.setSize(bucket.getSize() + 1);
-        }
-        //write the hash key in the perfect file
-        try (FSDataOutputStream out = fs.append(bucket.getPath2())) {
-            entry2.write(out);
-        }
+        //add the index record to bucket
+        bucket.getNewEntry1s().add(entry1);
+        bucket.setSize(bucket.getSize() + 1);
 
         //split the bucket if full
         if (bucket.getSize() >= metadata.getBucketCapacity()) {
@@ -299,19 +286,47 @@ public class PerfectFile {
         }
     }
 
+    private synchronized List<Bucket> flushBucketsData() {
+        List<Bucket> buckets = new ArrayList<>();
+        metadata.getDirectory().getBuckets().stream().forEach(b -> {
+            try {
+                if (b.needUpdate()) {
+                    List<BucketEntry> bes = getBucketAllEntries(b);
+
+                    bes.removeAll(b.getDeletedEntry1s());
+                    bes.addAll(b.getNewEntry1s());
+
+                    bes.sort((x, y) -> {
+                        return String.valueOf(x.getFileNameHash()).compareTo(String.valueOf(y.getFileNameHash()));
+                    });
+
+                    try (FSDataOutputStream out = fs.append(newPartFile(b.getPath(), true))) {
+                        for (BucketEntry be : bes) {
+                            be.write(out);
+                        }
+                    }
+
+                    b.clear();
+                    buckets.add(b);
+                }
+            } catch (IOException ex) {
+                Logger.getLogger(PerfectFile.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        });
+        return buckets;
+    }
+
     /**
      *
      * @param keyHash
      * @return
      * @throws IOException
      */
-    private BucketEntry1 getBucketEntry(long keyHash) throws IOException {
-
+    private BucketEntry getEntryFromBucket(long keyHash) throws IOException {
         Bucket bucket = metadata.getDirectory().getBucketByEntryKey(keyHash);
-
         //read the index record
-        try (FSDataInputStream in = fs.open(bucket.getPath1())) {
-            BucketEntry1 entry = new BucketEntry1();
+        try (FSDataInputStream in = fs.open(bucket.getPath())) {
+            BucketEntry entry = new BucketEntry();
             while (in.available() > 0) {
                 entry.readFields(in);
                 if (entry.getFileNameHash() == keyHash) {
@@ -322,14 +337,33 @@ public class PerfectFile {
         return null;
     }
 
-    private List<BucketEntry1> getBucketAllEntries(Bucket bucket) throws IOException {
-
-        List<BucketEntry1> bucketEntrys = new ArrayList<>();
+    private BucketEntry getEntryFromBucketByPerfectTable(long keyHash) throws IOException, DictionaryBuilderException {
+        Bucket bucket = metadata.getDirectory().getBucketByEntryKey(keyHash);
         //read the index record
-        try (FSDataInputStream in = fs.open(bucket.getPath1())) {
+
+        int pos = metadata.getPerfectTableHolder().get(bucket, keyHash);
+        if (pos < 0) {
+            return null;
+        }
+        
+        long offSet = (pos-1) * BucketEntry.RECORD_SIZE;
+
+        BucketEntry entry = new BucketEntry();
+        try (FSDataInputStream in = fs.open(bucket.getPath())) {
+            in.seek(offSet);
+            entry.readFields(in);
+        }
+        return entry;
+    }
+
+    private List<BucketEntry> getBucketAllEntries(Bucket bucket) throws IOException {
+
+        List<BucketEntry> bucketEntrys = new ArrayList<>();
+        //read the index record
+        try (FSDataInputStream in = fs.open(bucket.getPath())) {
 
             while (in.available() > 0) {
-                BucketEntry1 entry = new BucketEntry1();
+                BucketEntry entry = new BucketEntry();
                 entry.readFields(in);
 
                 bucketEntrys.add(entry);
@@ -354,55 +388,39 @@ public class PerfectFile {
         metadata.getDirectory().putBucket(toSplitBucket, pos1);
         metadata.getDirectory().putBucket(newBucket, pos2);
 
-        List<BucketEntry1> remainEntry1s = new ArrayList<>();
-        List<BucketEntry2> remainEntry2s = new ArrayList<>();
         int p;
-        try (FSDataOutputStream newOut1 = fs.append(newBucket.getPath1()); FSDataOutputStream newOut2 = fs.append(newBucket.getPath2()); FSDataInputStream in1 = fs.open(toSplitBucket.getPath1()); FSDataInputStream in2 = fs.open(toSplitBucket.getPath2())) {
+
+        for (BucketEntry be : toSplitBucket.getNewEntry1s()) {
+            p = (int) metadata.getDirectory().positionInDirectory(be.getFileNameHash());
+            if (p == pos2) {
+                newBucket.addnewEntry(be);
+                toSplitBucket.deleteEntry(be);
+            }
+
+        }
+        try (FSDataInputStream in1 = fs.open(toSplitBucket.getPath())) {
 
             //redistribute data into the new bucket
             while (in1.available() > 0) {
-                BucketEntry1 entry1 = new BucketEntry1();
-                BucketEntry2 entry2 = new BucketEntry2();
+                BucketEntry entry1 = new BucketEntry();
                 entry1.readFields(in1);
-                entry2.readFields(in2);
 
-                p = (int) metadata.getDirectory().positionInDirectory(entry1.hashCode());
+                p = (int) metadata.getDirectory().positionInDirectory(entry1.getFileNameHash());
                 if (p == pos2) {
-                    entry1.write(newOut1);
-                    entry2.write(newOut2);
-                    newBucket.setSize(newBucket.getSize() + 1);
-                } else {
-                    remainEntry1s.add(entry1);
-                    remainEntry2s.add(entry2);
+                    newBucket.addnewEntry(entry1);
+                    toSplitBucket.deleteEntry(entry1);
                 }
             }
         }
-
-        //update original bucket
-        try (FSDataOutputStream out1 = fs.create(toSplitBucket.getPath1(), true, conf.getInt(IO_FILE_BUFFER_SIZE_KEY, IO_FILE_BUFFER_SIZE_DEFAULT), metadata.getRepl(), indexBlockSize);
-                FSDataOutputStream out2 = fs.create(toSplitBucket.getPath2(), true, conf.getInt(IO_FILE_BUFFER_SIZE_KEY, IO_FILE_BUFFER_SIZE_DEFAULT), metadata.getRepl(), indexBlockSize)) {
-            toSplitBucket.setSize(0);
-            for (BucketEntry1 e : remainEntry1s) {
-                e.write(out1);
-                toSplitBucket.setSize(toSplitBucket.getSize() + 1);
-            }
-
-            for (BucketEntry2 e : remainEntry2s) {
-                e.write(out2);
-            }
-        }
-
     }
 
     private Bucket newBucket() throws IOException {
         int position = metadata.getIndexLastPosition() + 1;
         Bucket bucket = new Bucket();
         bucket.setLocalDepth(metadata.getDirectory().getGlobalDepth());
-        bucket.setPath1(new Path(filePath, INDEX_NAME + position));
-        bucket.setPath2(new Path(filePath, PERFECT_NAME + position));
+        bucket.setPath(new Path(filePath, INDEX_NAME + position));
 
-        fs.create(bucket.getPath1(), false, conf.getInt(IO_FILE_BUFFER_SIZE_KEY, IO_FILE_BUFFER_SIZE_DEFAULT), metadata.getRepl(), indexBlockSize).close();
-        fs.create(bucket.getPath2(), false, conf.getInt(IO_FILE_BUFFER_SIZE_KEY, IO_FILE_BUFFER_SIZE_DEFAULT), metadata.getRepl(), indexBlockSize).close();
+        fs.create(bucket.getPath(), false, conf.getInt(IO_FILE_BUFFER_SIZE_KEY, IO_FILE_BUFFER_SIZE_DEFAULT), metadata.getRepl(), indexBlockSize).close();
 
         metadata.setIndexLastPosition(position);
         return bucket;
@@ -416,9 +434,18 @@ public class PerfectFile {
      */
     private Path newPartFile() throws IOException {
         int position = metadata.getUsedPartFilePosition() + 1;
-        Path p = getPartFilePath(position);
-        fs.create(p, false, conf.getInt(IO_FILE_BUFFER_SIZE_KEY, IO_FILE_BUFFER_SIZE_DEFAULT), metadata.getRepl(), blockSize).close();
+        Path p = newPartFile(position, false);
         metadata.setUsedPartFilePosition(position);
+        return p;
+    }
+
+    private Path newPartFile(int position, boolean overwrite) throws IOException {
+        Path p = getPartFilePath(position);
+        return newPartFile(p, overwrite);
+    }
+
+    private Path newPartFile(Path p, boolean overwrite) throws IOException {
+        fs.create(p, overwrite, conf.getInt(IO_FILE_BUFFER_SIZE_KEY, IO_FILE_BUFFER_SIZE_DEFAULT), metadata.getRepl(), blockSize).close();
         return p;
     }
 
@@ -475,10 +502,6 @@ public class PerfectFile {
 
     public void setBlockSize(long blockSize) {
         this.blockSize = blockSize;
-    }
-
-    private long getHash(String name) {
-        return name.hashCode();
     }
 
     private Path getPartFilePath(int position) {

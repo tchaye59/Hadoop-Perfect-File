@@ -3,19 +3,16 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package net.almightshell.efiles;
+package net.almightshell.pf;
 
 import eu.danieldk.dictomaton.DictionaryBuilder;
 import eu.danieldk.dictomaton.DictionaryBuilderException;
 import eu.danieldk.dictomaton.PerfectHashDictionary;
 import java.io.IOException;
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.io.Text;
 
 /**
  *
@@ -23,8 +20,7 @@ import org.apache.hadoop.io.Text;
  */
 public class PerfectTableHolder {
 
-    HashMap<String, PerfectHashDictionary> map = new HashMap<>();
-    FileSystem fs = null;
+    private HashMap<String, PerfectHashDictionary> map = new HashMap<>();
     private PerfectFile pFile = null;
 
     PerfectTableHolder(PerfectFile pFile) {
@@ -41,8 +37,8 @@ public class PerfectTableHolder {
      * @throws IOException
      * @throws DictionaryBuilderException
      */
-    public int get(Bucket bucket, int entryHash) throws IOException, DictionaryBuilderException {
-        String dicName = bucket.getPath2().getName();
+    public int get(Bucket bucket, long entryHash) throws IOException, DictionaryBuilderException {
+        String dicName = bucket.getPath().getName();
         if (!map.containsKey(dicName)) {
             return reloadBucketDictionary(bucket).number(entryHash + "");
         }
@@ -61,11 +57,9 @@ public class PerfectTableHolder {
      * @throws IOException
      * @throws DictionaryBuilderException
      */
-    private PerfectHashDictionary reloadBucketDictionary(Bucket bucket) throws IOException, DictionaryBuilderException {
-        pFile.readMetadata();
+    public PerfectHashDictionary reloadBucketDictionary(Bucket bucket) throws IOException, DictionaryBuilderException {
         PerfectHashDictionary dic = new DictionaryBuilder().addAll(getAllFileNamesFromBucket(bucket)).buildPerfectHash();
-        map.put(bucket.getPath2().getName(), dic);
-        pFile.writeMetadata();
+        map.put(bucket.getPath().getName(), dic);
         return dic;
     }
 
@@ -79,11 +73,11 @@ public class PerfectTableHolder {
     private List<String> getAllFileNamesFromBucket(Bucket bucket) throws IOException {
         List<String> strings = new ArrayList<>();
         //read the perfect file  records
-        try (FSDataInputStream in = fs.open(bucket.getPath2())) {
+        try (FSDataInputStream in = pFile.getFs().open(bucket.getPath())) {
             while (in.available() > 0) {
-                BucketEntry2 entry2 = new BucketEntry2();
-                entry2.readFields(in);
-                strings.add(entry2.getFileName());
+                BucketEntry be = new BucketEntry();
+                be.readFields(in);
+                strings.add(be.getFileNameHash()+"");
             }
         }
         return strings;

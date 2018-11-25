@@ -12,7 +12,6 @@ import org.apache.hadoop.fs.FsUrlStreamHandlerFactory;
 import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.junit.Test;
-import static org.junit.Assert.*;
 
 /**
  *
@@ -32,21 +31,8 @@ public class FileCreatTest {
     /**
      * Test of process method, of class FileCreat.
      */
-    @Test
-    public void testProcess() throws Exception {
-        Configuration conf = new Configuration();
-        conf.set("fs.defaultFS", hdfsUrl);
-        conf.set("fs.hdfs.impl", DistributedFileSystem.class.getName());
-        conf.set("fs.file.impl", LocalFileSystem.class.getName());
-        conf.setBoolean("dfs.support.append", true);
-        FileSystem fs = FileSystem.get(conf);
-
-        FileCreat fc = new FileCreat(fs, conf, 135);
-        fc.process();
-    }
-    
 //    @Test
-//    public void testCreat() throws Exception {
+//    public void testProcess() throws Exception {
 //        Configuration conf = new Configuration();
 //        conf.set("fs.defaultFS", hdfsUrl);
 //        conf.set("fs.hdfs.impl", DistributedFileSystem.class.getName());
@@ -55,7 +41,19 @@ public class FileCreatTest {
 //        FileSystem fs = FileSystem.get(conf);
 //
 //        FileCreat fc = new FileCreat(fs, conf, 135);
-//        fc.processEH();
+//        fc.process();
 //    }
+    @Test
+    public void testCreat() throws Exception {
+        Configuration conf = new Configuration();
+        conf.set("fs.defaultFS", hdfsUrl);
+        conf.set("fs.hdfs.impl", DistributedFileSystem.class.getName());
+        conf.set("fs.file.impl", LocalFileSystem.class.getName());
+        conf.setBoolean("dfs.support.append", true);
+        FileSystem fs = FileSystem.get(conf);
+
+        FileCreat fc = new FileCreat(fs, conf, 135);
+        fc.processEH();
+    }
 
 }

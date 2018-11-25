@@ -10,7 +10,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintWriter;
 import static junit.framework.Assert.assertTrue;
-import net.almightshell.efiles.PerfectFile;
+import net.almightshell.pf.PerfectFile;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 
@@ -153,7 +153,7 @@ public class FileCreat {
             fs.delete(path, true);
         }
 
-        PerfectFile ef = PerfectFile.newFile(conf, path,500);
+        PerfectFile ef = PerfectFile.newFile(conf, path,50,false,true);
 
         long currentTimeMillis = System.currentTimeMillis();
         ef.putAll(new Path(dataPath + "/" + fileNumber), true);

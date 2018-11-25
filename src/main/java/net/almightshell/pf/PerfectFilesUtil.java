@@ -3,7 +3,7 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package net.almightshell.efiles;
+package net.almightshell.pf;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -22,6 +22,10 @@ import org.apache.hadoop.io.Writable;
  * @author Shell
  */
 public class PerfectFilesUtil {
+    
+    public static long getHash(String name) {
+        return name.hashCode();
+    }
 
     public static byte[] serialize(Writable writable) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -35,7 +39,7 @@ public class PerfectFilesUtil {
         }
     }
 
-    public static <T extends Writable> T asWritable(byte[] bytes, Class<T> clazz)throws IOException {
+    public static <T extends Writable> T asWritable(byte[] bytes, Class<T> clazz) throws IOException {
         T result = null;
         DataInputStream dataIn = null;
         try {
@@ -84,12 +88,12 @@ public class PerfectFilesUtil {
      * @param clazz
      * @return Student object
      */
-    public static <T extends Serializable> T  toObject(byte[] stream,Class<T> clazz) {
+    public static <T extends Serializable> T toObject(byte[] stream, Class<T> clazz) {
         T s = null;
 
         try (ByteArrayInputStream bais = new ByteArrayInputStream(stream);
                 ObjectInputStream ois = new ObjectInputStream(bais);) {
-            s =  (T) ois.readObject();
+            s = (T) ois.readObject();
         } catch (IOException e) {
             // Error in de-serialization
             e.printStackTrace();
@@ -106,7 +110,7 @@ public class PerfectFilesUtil {
         }
         return key << -globalDepth >>> -globalDepth;
 //        String s = Long.toBinaryString(key);
-//        s = s.substring(s.length() - globalDepth, s.length());
+//        s = s.substring((int) (s.length() - globalDepth), s.length());
 //        return s.isEmpty() ? 0 : new BigInteger(s, 2).intValue();
     }
 

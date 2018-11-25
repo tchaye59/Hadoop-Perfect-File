@@ -3,11 +3,13 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package net.almightshell.efiles;
+package net.almightshell.pf;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
@@ -19,36 +21,59 @@ import org.apache.hadoop.io.Writable;
  */
 public class Bucket implements Writable {
 
-    private Path path1;
-    private Path path2;
+    private Path path;
     private long localDepth = 0;
     private int size = 0;
+
+    private final List<BucketEntry> newEntry1s = new ArrayList<>();
+    private final List<BucketEntry> deletedEntry1s = new ArrayList<>();
+
+    public Bucket(Path path1) {
+        this.path = path1;
+    }
 
     public Bucket() {
     }
 
+    public void addnewEntry(BucketEntry be) {
+        newEntry1s.add(be);
+        size++;
+    }
+
+    public void deleteEntry(BucketEntry be) {
+        deletedEntry1s.add(be);
+        size--;
+    }
+
+    public boolean needUpdate() {
+        return !this.deletedEntry1s.isEmpty() || !this.newEntry1s.isEmpty();
+    }
+
+    public void clear() {
+        this.newEntry1s.clear();
+        this.deletedEntry1s.clear();
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
-        Text.writeString(out, path1.toString());
-        Text.writeString(out, path2.toString());
+        Text.writeString(out, path.toString());
         out.writeLong(localDepth);
         out.writeInt(size);
     }
 
     @Override
     public void readFields(DataInput in) throws IOException {
-        path1 = new Path(Text.readString(in));
-        path2 = new Path(Text.readString(in));
+        path = new Path(Text.readString(in));
         localDepth = in.readLong();
         size = in.readInt();
     }
 
-    public Path getPath1() {
-        return path1;
+    public Path getPath() {
+        return path;
     }
 
-    public void setPath1(Path path1) {
-        this.path1 = path1;
+    public void setPath(Path path) {
+        this.path = path;
     }
 
     public long getLocalDepth() {
@@ -67,18 +92,18 @@ public class Bucket implements Writable {
         this.size = size;
     }
 
-    public Path getPath2() {
-        return path2;
+    public List<BucketEntry> getDeletedEntry1s() {
+        return deletedEntry1s;
     }
 
-    public void setPath2(Path path2) {
-        this.path2 = path2;
+    public List<BucketEntry> getNewEntry1s() {
+        return newEntry1s;
     }
 
     @Override
     public int hashCode() {
         int hash = 3;
-        hash = 67 * hash + Objects.hashCode(this.path1);
+        hash = 67 * hash + Objects.hashCode(this.path);
         return hash;
     }
 
@@ -95,12 +120,12 @@ public class Bucket implements Writable {
         }
         final Bucket other = (Bucket) obj;
 
-        return path1.getName().equals(other.path1.getName());
+        return path.getName().equals(other.path.getName());
     }
 
     @Override
     public String toString() {
-        return "Bucket{" + "path=" + path1 + ", localDepth=" + localDepth + ", size=" + size + '}';
+        return "Bucket{" + "path=" + path + ", localDepth=" + localDepth + ", size=" + size + '}';
     }
 
 }

@@ -3,7 +3,7 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package net.almightshell.efiles;
+package net.almightshell.pf;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -18,7 +18,7 @@ import org.apache.hadoop.io.Writable;
  */
 public class PerfectFileMetadata implements Writable {
 
-    private int bucketCapacity = 1000;
+    private int bucketCapacity = 5000;
     private int indexLastPosition = -1;
     private int usedPartFilePosition = -1;
     private String currentDataPart = null;
@@ -46,7 +46,7 @@ public class PerfectFileMetadata implements Writable {
         out.writeUTF(currentDataPart);
         out.writeShort(repl);
         directory.write(out);
-        
+
         BytesWritable bw = new BytesWritable();
         if (perfectTableHolder != null) {
             bw.set(new BytesWritable(PerfectFilesUtil.toObjectStream(new PerfectHashDictionaryBean(perfectTableHolder.getMap()))));
@@ -69,6 +69,7 @@ public class PerfectFileMetadata implements Writable {
         if (perfectTableHolder != null) {
             try {
                 perfectTableHolder.setMap(PerfectFilesUtil.toObject(bw.getBytes(), PerfectHashDictionaryBean.class).getMap());
+            
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -104,6 +105,10 @@ public class PerfectFileMetadata implements Writable {
 
     public int getUsedPartFilePosition() {
         return usedPartFilePosition;
+    }
+
+    public PerfectTableHolder getPerfectTableHolder() {
+        return perfectTableHolder;
     }
 
     public void setUsedPartFilePosition(int usedPartFilePosition) {

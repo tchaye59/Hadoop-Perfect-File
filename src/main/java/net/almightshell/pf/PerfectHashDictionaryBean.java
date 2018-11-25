@@ -3,7 +3,7 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package net.almightshell.efiles;
+package net.almightshell.pf;
 
 import eu.danieldk.dictomaton.PerfectHashDictionary;
 import java.io.Serializable;

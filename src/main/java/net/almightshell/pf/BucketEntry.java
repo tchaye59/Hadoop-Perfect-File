@@ -3,41 +3,36 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package net.almightshell.efiles;
+package net.almightshell.pf;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.io.Serializable;
-import java.util.Objects;
-import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 
 /**
  *
  * @author Shell
  */
-public class BucketEntry1 implements Writable {
-    
-    public final int RECORD_SIZE = 1*16 + 3*8;
+public class BucketEntry implements Writable {
+
+    public static final int RECORD_SIZE = 3*Integer.BYTES + 1*Long.BYTES;
 
     private long fileNameHash;
     private int partFilePosition;
     private int offset;
     private int size;
-
-    public BucketEntry1() {
+    
+    public BucketEntry() {
     }
 
-    public BucketEntry1(long fileNameHash, int partFilePosition, int offset, int size) {
+    public BucketEntry(long fileNameHash, int partFilePosition, int offset, int size) {
         this.fileNameHash = fileNameHash;
         this.partFilePosition = partFilePosition;
         this.offset = offset;
         this.size = size;
     }
 
-    
-    
     @Override
     public void write(DataOutput out) throws IOException {
         out.writeLong(fileNameHash);
@@ -104,7 +99,7 @@ public class BucketEntry1 implements Writable {
         if (getClass() != obj.getClass()) {
             return false;
         }
-        final BucketEntry1 other = (BucketEntry1) obj;
+        final BucketEntry other = (BucketEntry) obj;
         if (this.fileNameHash != other.fileNameHash) {
             return false;
         }
@@ -113,7 +108,7 @@ public class BucketEntry1 implements Writable {
 
     @Override
     public String toString() {
-        return "BucketEntry1{" + "fileNameHash=" + fileNameHash + ", partFilePosition=" + partFilePosition + ", offset=" + offset + ", size=" + size + '}';
+        return "BucketEntry{" + "fileNameHash=" + fileNameHash + ", partFilePosition=" + partFilePosition + ", offset=" + offset + ", size=" + size + '}';
     }
 
 }

@@ -15,7 +15,7 @@ import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.List;
 import static junit.framework.Assert.assertTrue;
-import net.almightshell.efiles.PerfectFile;
+import net.almightshell.pf.PerfectFile;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -71,19 +71,19 @@ public class FileAccessing {
             writer.println("Accessed data Size : " + fileNameSubList.size());
 
             long time = 0;
-            
+
             time = processHAR();
             writer.println("HAR : " + time + " ms");
-            
+
             time = processHDFS();
             writer.println("HDFS : " + time + " ms");
-            
+
             time = processMap();
             writer.println("MapFile : " + time + " ms");
-            
+
             time = processEH();
             writer.println("EFile : " + time + " ms");
-            
+
             time = processEH();
             writer.println("EFile : " + time + " ms");
 
@@ -91,7 +91,7 @@ public class FileAccessing {
     }
 
     public long processHAR() throws IOException, Exception {
-        
+
         File file = new File("E:\\hadoop-experiment\\results", "har");
         if (file.exists()) {
             file.delete();
@@ -99,13 +99,12 @@ public class FileAccessing {
         file.mkdirs();
         //
         long currentTimeMillis = System.currentTimeMillis();
-        
-        
-         Path parent = new Path("har:///" + resultPath, "har" + fileNumber + ".har");
-         FileSystem hfs = parent.getFileSystem(conf);
-        
+
+        Path parent = new Path("har:///" + resultPath, "har" + fileNumber + ".har");
+        FileSystem hfs = parent.getFileSystem(conf);
+
         for (String name : fileNameSubList) {
-            Path harPath = new Path("har:///" + resultPath, "har" + fileNumber + ".har/" +"/"+fileNumber+"/"+ name);
+            Path harPath = new Path("har:///" + resultPath, "har" + fileNumber + ".har/" + "/" + fileNumber + "/" + name);
             IOUtils.copyBytes(hfs.open(harPath), new FileOutputStream(new File(file, name)), conf);
         }
 
@@ -166,8 +165,10 @@ public class FileAccessing {
         file.mkdirs();
 
         if (ef == null) {
-            ef = PerfectFile.open(conf, new Path(resultPath + "/Ehfile-" + fileNumber),true);
+            ef = PerfectFile.open(conf, new Path(resultPath + "/Ehfile-" + fileNumber), false,true);
         }
+
+        ef.listFiles();
 
         long currentTimeMillis = System.currentTimeMillis();
         for (String name : fileNameSubList) {
@@ -175,6 +176,7 @@ public class FileAccessing {
             f.createNewFile();
             IOUtils.copyBytes(ef.get(name), new FileOutputStream(f), conf);
         }
+
         long time = System.currentTimeMillis() - currentTimeMillis;
         System.out.println("processEH : " + time);
         return time;
