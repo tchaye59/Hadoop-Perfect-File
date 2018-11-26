@@ -81,10 +81,10 @@ public class FileAccessing {
             time = processMap();
             writer.println("MapFile : " + time + " ms");
 
-            time = processEH();
+            time = processPF();
             writer.println("EFile : " + time + " ms");
 
-            time = processEH();
+            time = processPF();
             writer.println("EFile : " + time + " ms");
 
         }
@@ -157,7 +157,7 @@ public class FileAccessing {
 
     }
 
-    public long processEH() throws IOException, Exception {
+    public long processPF() throws IOException, Exception {
         File file = new File("E:\\hadoop-experiment\\results", "efile");
         if (file.exists()) {
             file.delete();
@@ -165,11 +165,9 @@ public class FileAccessing {
         file.mkdirs();
 
         if (ef == null) {
-            ef = PerfectFile.open(conf, new Path(resultPath + "/Ehfile-" + fileNumber), false,true);
+            ef = PerfectFile.open(conf, new Path(resultPath + "/Ehfile-" + fileNumber), true,true);
         }
-
-        ef.listFiles();
-
+  
         long currentTimeMillis = System.currentTimeMillis();
         for (String name : fileNameSubList) {
             File f = new File(file, name);
@@ -178,7 +176,7 @@ public class FileAccessing {
         }
 
         long time = System.currentTimeMillis() - currentTimeMillis;
-        System.out.println("processEH : " + time);
+        System.out.println("processPF : " + time);
         return time;
     }
 

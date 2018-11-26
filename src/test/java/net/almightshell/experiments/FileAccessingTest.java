@@ -36,7 +36,7 @@ public class FileAccessingTest {
     /**
      * Test of process method, of class FileAccessing.
      */
-//    @Test
+    @Test
     public void testProcess() throws Exception {
         Configuration conf = new Configuration();
         conf.set("fs.defaultFS", hdfsUrl);
@@ -49,8 +49,8 @@ public class FileAccessingTest {
         fa.process();
     }
     
-    @Test
-    public void testProcess2() throws Exception {
+//    @Test
+    public void testProcessEH() throws Exception {
         Configuration conf = new Configuration();
         conf.set("fs.defaultFS", hdfsUrl);
         conf.set("fs.hdfs.impl", DistributedFileSystem.class.getName());
@@ -59,7 +59,7 @@ public class FileAccessingTest {
         FileSystem fs = FileSystem.get(conf);
 
         FileAccessing fa = new FileAccessing(fs, conf, 135);
-        fa.processEH();
+        fa.processPF();
     }
     
 //    @Test

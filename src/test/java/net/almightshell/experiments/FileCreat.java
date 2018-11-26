@@ -56,20 +56,21 @@ public class FileCreat {
             writer.println("Data Size : " + fileNumber);
 
             long time = 0;
-            
+
             time = processHDFS();
             writer.println("HDFS : " + time + " ms");
-
-            time = processEH();
-            writer.println("EFile : " + time + " ms");
-
-            
 
             time = processHAR();
             writer.println("HAR : " + time + " ms");
 
             time = processMap();
             writer.println("MapFile : " + time + " ms");
+            
+            time = processPF();
+            writer.println("PerfectFile : " + time + " ms");
+            
+            time = processPFFromLocal();
+            writer.println("PerfectFile : " + time + " ms");
 
         }
     }
@@ -145,7 +146,7 @@ public class FileCreat {
 
     }
 
-    public long processEH() throws IOException, Exception {
+    public long processPF() throws IOException, Exception {
 
         Path path = new Path(resultPath + "/Ehfile-" + fileNumber);
 
@@ -153,12 +154,30 @@ public class FileCreat {
             fs.delete(path, true);
         }
 
-        PerfectFile ef = PerfectFile.newFile(conf, path,50,false,true);
+        PerfectFile ef = PerfectFile.newFile(conf, path, 100, false, true);
 
         long currentTimeMillis = System.currentTimeMillis();
         ef.putAll(new Path(dataPath + "/" + fileNumber), true);
         long time = System.currentTimeMillis() - currentTimeMillis;
-        System.out.println("processEH : " + time);
+        System.out.println("processPF : " + time);
         return time;
     }
+
+    public long processPFFromLocal() throws IOException, Exception {
+
+        Path path = new Path(resultPath + "/Ehfile-" + fileNumber);
+
+        if (fs.exists(path)) {
+            fs.delete(path, true);
+        }
+
+        PerfectFile ef = PerfectFile.newFile(conf, path, 100, false, true);
+
+        long currentTimeMillis = System.currentTimeMillis();
+        ef.putAllFromLocal(new Path("file:///E://hadoop-experiment//data//135/"), true);
+        long time = System.currentTimeMillis() - currentTimeMillis;
+        System.out.println("processPFFromLocal : " + time);
+        return time;
+    }
+
 }

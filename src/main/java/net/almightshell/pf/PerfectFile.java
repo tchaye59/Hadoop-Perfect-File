@@ -28,8 +28,10 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileAlreadyExistsException;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.BytesWritable;
+import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.Writable;
 
 /**
@@ -57,6 +59,7 @@ public class PerfectFile {
     private Path filePath = null;
     private Path metadataPath = null;
     private FileSystem fs = null;
+    private LocalFileSystem lfs = null;
 
     PerfectFileMetadata metadata = null;
     private Path currentDataPartPath = null;
@@ -71,6 +74,7 @@ public class PerfectFile {
         this.perfectModeEnabled = perfectModeEnabled;
 
         fs = FileSystem.get(conf);
+        lfs = LocalFileSystem.getLocal(conf);
         metadata = new PerfectFileMetadata(this, perfectModeEnabled);
 
         if (isCacheEnabled()) {
@@ -141,28 +145,49 @@ public class PerfectFile {
         return new PerfectFile(conf, filePath, -1, false, false, false);
     }
 
-    private synchronized void put(FSDataOutputStream out, String key, Writable writable) throws IOException {
-        BucketEntry entry1 = new BucketEntry();
-        entry1.setFileNameHash(PerfectFilesUtil.getHash(key));
-        entry1.setPartFilePosition(metadata.getUsedPartFilePosition());
-        entry1.setOffset((int) out.getPos());
-
-        //copy the file content
-        writable.write(out);
-        entry1.setSize((int) (out.getPos() - entry1.getOffset()));
-        addBucketEntry(entry1);
-    }
-
     private void put(FSDataOutputStream out, FileStatus status) throws IOException {
         if (status.getLen() > blockSize) {
             throw new FileSystemException(status.getPath().getName() + " is not a small. The file size is too big");
         }
 
-        byte[] bs = new byte[(int) status.getLen()];
-        fs.open(status.getPath()).readFully(bs);
-        put(out, status.getPath().getName(), new BytesWritable(bs));
+        BucketEntry be = new BucketEntry();
+        be.setFileNameHash(PerfectFilesUtil.getHash(status.getPath().getName()));
+        be.setPartFilePosition(metadata.getUsedPartFilePosition());
+        be.setOffset((int) out.getPos());
+
+        try (FSDataInputStream in = fs.open(status.getPath())) {
+            IOUtils.copyBytes(in, out, conf, false);
+        }
+
+        be.setSize((int) (out.getPos() - be.getOffset()));
+        addBucketEntry(be);
+    }
+    
+    private void putFromLocal(FSDataOutputStream out, FileStatus status) throws IOException {
+        if (status.getLen() > blockSize) {
+            throw new FileSystemException(status.getPath().getName() + " is not a small. The file size is too big");
+        }
+
+        BucketEntry be = new BucketEntry();
+        be.setFileNameHash(PerfectFilesUtil.getHash(status.getPath().getName()));
+        be.setPartFilePosition(metadata.getUsedPartFilePosition());
+        be.setOffset((int) out.getPos());
+
+        try (FSDataInputStream in = lfs.open(status.getPath())) {
+            IOUtils.copyBytes(in, out, conf, false);
+        }
+
+        be.setSize((int) (out.getPos() - be.getOffset()));
+        addBucketEntry(be);
     }
 
+    /**
+     * Append a file from HDFS to the perfect file. The file name is use as key to acces the file later.
+     * Make sure that the file name is unique fo eache file
+     * @param path
+     * @throws IOException
+     * @throws DictionaryBuilderException 
+     */
     public void put(Path path) throws IOException, DictionaryBuilderException {
         if (fs.getUsed(currentDataPartPath) >= partMaxSize) {
             currentDataPartPath = newPartFile();
@@ -171,6 +196,23 @@ public class PerfectFile {
 
         try (FSDataOutputStream out = fs.append(currentDataPartPath)) {
             put(out, fs.getFileStatus(path));
+        }
+
+        List<Bucket> buckets = flushBucketsData();
+        for (Bucket bucket : buckets) {
+            metadata.getPerfectTableHolder().reloadBucketDictionary(bucket);
+        }
+        writeMetadata();
+    }
+    
+    public void putFromLocal(Path path) throws IOException, DictionaryBuilderException {
+        if (fs.getUsed(currentDataPartPath) >= partMaxSize) {
+            currentDataPartPath = newPartFile();
+            metadata.setCurrentDataPartPath(currentDataPartPath.getName());
+        }
+
+        try (FSDataOutputStream out = fs.append(currentDataPartPath)) {
+            putFromLocal(out, fs.getFileStatus(path));
         }
 
         List<Bucket> buckets = flushBucketsData();
@@ -191,6 +233,27 @@ public class PerfectFile {
 
             for (FileStatus fse : fses) {
                 put(out, fse);
+            }
+        }
+        List<Bucket> buckets = flushBucketsData();
+        for (Bucket bucket : buckets) {
+            metadata.getPerfectTableHolder().reloadBucketDictionary(bucket);
+        }
+        writeMetadata();
+    }
+
+    public void putAllFromLocal(Path dirpath, boolean recursive) throws IOException, DictionaryBuilderException {
+       
+        FileStatus[] fses = lfs.listStatus(dirpath);
+
+        try (FSDataOutputStream out = fs.append(currentDataPartPath)) {
+            if (fs.getUsed(currentDataPartPath) >= partMaxSize) {
+                currentDataPartPath = newPartFile();
+                metadata.setCurrentDataPartPath(currentDataPartPath.getName());
+            }
+
+            for (FileStatus fse : fses) {
+                putFromLocal(out, fse);
             }
         }
         List<Bucket> buckets = flushBucketsData();
@@ -253,8 +316,8 @@ public class PerfectFile {
         try (FSDataInputStream in = fs.open(getPartFilePath(entry.getPartFilePosition()))) {
             in.seek(entry.getOffset());
             in.readFully(b);
+//            in.read(b, 0, b.length);
         }
-
         return new ByteArrayInputStream(b);
     }
 
@@ -345,8 +408,8 @@ public class PerfectFile {
         if (pos < 0) {
             return null;
         }
-        
-        long offSet = (pos-1) * BucketEntry.RECORD_SIZE;
+
+        long offSet = (pos - 1) * BucketEntry.RECORD_SIZE;
 
         BucketEntry entry = new BucketEntry();
         try (FSDataInputStream in = fs.open(bucket.getPath())) {
