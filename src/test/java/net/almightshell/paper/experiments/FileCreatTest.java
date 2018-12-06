@@ -3,8 +3,9 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package net.almightshell.experiments;
+package net.almightshell.paper.experiments;
 
+import net.almightshell.utils.FileCreat;
 import java.net.URL;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -54,7 +55,7 @@ public class FileCreatTest {
         FileSystem fs = FileSystem.get(conf);
 
         FileCreat fc = new FileCreat(fs, conf, 135);
-        fc.processPF();
+//        fc.processPF();
         fc.processPFFromLocal();
     }
 

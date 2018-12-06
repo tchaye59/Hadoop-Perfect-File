@@ -11,18 +11,19 @@ import java.io.IOException;
 import org.apache.hadoop.io.Writable;
 
 /**
+ * This class represents an entry in the index file
  *
  * @author Shell
  */
 public class BucketEntry implements Writable {
 
-    public static final int RECORD_SIZE = 3*Integer.BYTES + 1*Long.BYTES;
+    public static final int RECORD_SIZE = 3 * Integer.BYTES + 1 * Long.BYTES;
 
     private long fileNameHash;
     private int partFilePosition;
     private int offset;
     private int size;
-    
+
     public BucketEntry() {
     }
 

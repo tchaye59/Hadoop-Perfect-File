@@ -15,12 +15,13 @@ import java.util.logging.Logger;
 import org.apache.hadoop.io.Writable;
 
 /**
+ * This class represent the directory of th extendable hash function
  *
  * @author Shell
  */
 public class Directory implements Writable {
 
-    private List<Integer> directory = new ArrayList<>();
+    private List<Integer> pointers = new ArrayList<>();
     private List<Bucket> buckets = new ArrayList<>();
     private long globalDepth = 0;
 
@@ -28,16 +29,16 @@ public class Directory implements Writable {
     }
 
     public void init(Bucket bucket) {
-        directory.clear();
-        directory.add(0);
+        pointers.clear();
+        pointers.add(0);
         buckets.clear();
         buckets.add(bucket);
     }
 
     public void doubleSize() {
-        int x = directory.size();
+        int x = pointers.size();
         for (int i = 0; i < x; i++) {
-            directory.add(directory.get(i));
+            pointers.add(pointers.get(i));
         }
         globalDepth++;
     }
@@ -47,7 +48,7 @@ public class Directory implements Writable {
     }
 
     public Bucket getBucket(long pos) {
-        return buckets.get(directory.get((int) pos));
+        return buckets.get(pointers.get((int) pos));
     }
 
     public Bucket getBucketByEntryKey(long key) {
@@ -58,14 +59,14 @@ public class Directory implements Writable {
         if (!buckets.contains(bucket)) {
             buckets.add(bucket);
         }
-        directory.set(pos, buckets.indexOf(bucket));
+        pointers.set(pos, buckets.indexOf(bucket));
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
         out.writeLong(globalDepth);
-        out.writeInt(directory.size());
-        directory.stream().forEach((v) -> {
+        out.writeInt(pointers.size());
+        pointers.stream().forEach((v) -> {
             try {
                 out.writeInt(v);
             } catch (IOException ex) {
@@ -87,10 +88,10 @@ public class Directory implements Writable {
     public void readFields(DataInput in) throws IOException {
         globalDepth = in.readLong();
 
-        directory.clear();
+        pointers.clear();
         int size = in.readInt();
         while (size > 0) {
-            directory.add(in.readInt());
+            pointers.add(in.readInt());
             size--;
         }
 
@@ -105,12 +106,12 @@ public class Directory implements Writable {
 
     }
 
-    public List<Integer> getDirectory() {
-        return directory;
+    public List<Integer> getPointers() {
+        return pointers;
     }
 
-    public void setDirectory(List<Integer> directory) {
-        this.directory = directory;
+    public void setPointers(List<Integer> pointers) {
+        this.pointers = pointers;
     }
 
     public List<Bucket> getBuckets() {

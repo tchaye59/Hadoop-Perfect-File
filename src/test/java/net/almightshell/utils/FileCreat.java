@@ -3,7 +3,7 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package net.almightshell.experiments;
+package net.almightshell.utils;
 
 import java.io.File;
 import java.io.FileNotFoundException;

@@ -30,9 +30,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.IOUtils;
-import org.apache.hadoop.io.Writable;
 
 /**
  *
@@ -49,6 +47,7 @@ public class PerfectFile {
      * size of each part file size *
      */
     long partMaxSize = 2 * 1024 * 1024 * 1024l;
+     
     /**
      * size of blocks in hadoop archives *
      */
@@ -105,46 +104,6 @@ public class PerfectFile {
         metadata.setBucketCapacity(bucketCapacity);
     }
 
-    public static PerfectFile newFile(Configuration conf, Path filePath, int bucketCapacity, boolean cacheEnabled, boolean perfectModeEnabled) throws IOException, Exception {
-        return new PerfectFile(conf, filePath, bucketCapacity, true, cacheEnabled, perfectModeEnabled);
-    }
-
-    public static PerfectFile newFile(Configuration conf, Path filePath, int bucketCapacity) throws IOException, Exception {
-        return new PerfectFile(conf, filePath, bucketCapacity, true, false, false);
-    }
-
-    public static PerfectFile newFile(Configuration conf, Path filePath, boolean cacheEnabled) throws IOException, Exception {
-        return new PerfectFile(conf, filePath, -1, true, cacheEnabled, false);
-    }
-
-    public static PerfectFile newFile(Configuration conf, Path filePath) throws IOException, Exception {
-        return new PerfectFile(conf, filePath, -1, true, false, false);
-    }
-
-    public static PerfectFile open(Configuration conf, Path filePath, int bucketCapacity, boolean cacheEnabled, boolean perfectModeEnabled) throws IOException, Exception {
-        return new PerfectFile(conf, filePath, bucketCapacity, false, cacheEnabled, perfectModeEnabled);
-    }
-
-    public static PerfectFile open(Configuration conf, Path filePath, boolean cacheEnabled, boolean perfectModeEnabled) throws IOException, Exception {
-        return new PerfectFile(conf, filePath, -1, false, cacheEnabled, perfectModeEnabled);
-    }
-
-    public static PerfectFile open(Configuration conf, Path filePath, int bucketCapacity) throws IOException, Exception {
-        return new PerfectFile(conf, filePath, bucketCapacity, false, false, false);
-    }
-
-    public static PerfectFile open(Configuration conf, Path filePath, int bucketCapacity, boolean cacheEnabled) throws IOException, Exception {
-        return new PerfectFile(conf, filePath, bucketCapacity, false, cacheEnabled, false);
-    }
-
-    public static PerfectFile open(Configuration conf, Path filePath, boolean cacheEnabled) throws IOException, Exception {
-        return new PerfectFile(conf, filePath, -1, false, cacheEnabled, true);
-    }
-
-    public static PerfectFile open(Configuration conf, Path filePath) throws IOException, Exception {
-        return new PerfectFile(conf, filePath, -1, false, false, false);
-    }
-
     private void put(FSDataOutputStream out, FileStatus status) throws IOException {
         if (status.getLen() > blockSize) {
             throw new FileSystemException(status.getPath().getName() + " is not a small. The file size is too big");
@@ -162,7 +121,7 @@ public class PerfectFile {
         be.setSize((int) (out.getPos() - be.getOffset()));
         addBucketEntry(be);
     }
-    
+
     private void putFromLocal(FSDataOutputStream out, FileStatus status) throws IOException {
         if (status.getLen() > blockSize) {
             throw new FileSystemException(status.getPath().getName() + " is not a small. The file size is too big");
@@ -182,11 +141,13 @@ public class PerfectFile {
     }
 
     /**
-     * Append a file from HDFS to the perfect file. The file name is use as key to acces the file later.
-     * Make sure that the file name is unique fo eache file
+     * Append a file from HDFS to the perfect file. The file name is use as key
+     * to acces the file later. Make sure that the file name is unique for eache
+     * file
+     *
      * @param path
      * @throws IOException
-     * @throws DictionaryBuilderException 
+     * @throws DictionaryBuilderException
      */
     public void put(Path path) throws IOException, DictionaryBuilderException {
         if (fs.getUsed(currentDataPartPath) >= partMaxSize) {
@@ -204,7 +165,7 @@ public class PerfectFile {
         }
         writeMetadata();
     }
-    
+
     public void putFromLocal(Path path) throws IOException, DictionaryBuilderException {
         if (fs.getUsed(currentDataPartPath) >= partMaxSize) {
             currentDataPartPath = newPartFile();
@@ -243,7 +204,7 @@ public class PerfectFile {
     }
 
     public void putAllFromLocal(Path dirpath, boolean recursive) throws IOException, DictionaryBuilderException {
-       
+
         FileStatus[] fses = lfs.listStatus(dirpath);
 
         try (FSDataOutputStream out = fs.append(currentDataPartPath)) {
@@ -573,6 +534,46 @@ public class PerfectFile {
 
     public FileSystem getFs() {
         return fs;
+    }
+
+    public static PerfectFile newFile(Configuration conf, Path filePath, int bucketCapacity, boolean cacheEnabled, boolean perfectModeEnabled) throws IOException, Exception {
+        return new PerfectFile(conf, filePath, bucketCapacity, true, cacheEnabled, perfectModeEnabled);
+    }
+
+    public static PerfectFile newFile(Configuration conf, Path filePath, int bucketCapacity) throws IOException, Exception {
+        return new PerfectFile(conf, filePath, bucketCapacity, true, false, false);
+    }
+
+    public static PerfectFile newFile(Configuration conf, Path filePath, boolean cacheEnabled) throws IOException, Exception {
+        return new PerfectFile(conf, filePath, -1, true, cacheEnabled, false);
+    }
+
+    public static PerfectFile newFile(Configuration conf, Path filePath) throws IOException, Exception {
+        return new PerfectFile(conf, filePath, -1, true, false, false);
+    }
+
+    public static PerfectFile open(Configuration conf, Path filePath, int bucketCapacity, boolean cacheEnabled, boolean perfectModeEnabled) throws IOException, Exception {
+        return new PerfectFile(conf, filePath, bucketCapacity, false, cacheEnabled, perfectModeEnabled);
+    }
+
+    public static PerfectFile open(Configuration conf, Path filePath, boolean cacheEnabled, boolean perfectModeEnabled) throws IOException, Exception {
+        return new PerfectFile(conf, filePath, -1, false, cacheEnabled, perfectModeEnabled);
+    }
+
+    public static PerfectFile open(Configuration conf, Path filePath, int bucketCapacity) throws IOException, Exception {
+        return new PerfectFile(conf, filePath, bucketCapacity, false, false, false);
+    }
+
+    public static PerfectFile open(Configuration conf, Path filePath, int bucketCapacity, boolean cacheEnabled) throws IOException, Exception {
+        return new PerfectFile(conf, filePath, bucketCapacity, false, cacheEnabled, false);
+    }
+
+    public static PerfectFile open(Configuration conf, Path filePath, boolean cacheEnabled) throws IOException, Exception {
+        return new PerfectFile(conf, filePath, -1, false, cacheEnabled, true);
+    }
+
+    public static PerfectFile open(Configuration conf, Path filePath) throws IOException, Exception {
+        return new PerfectFile(conf, filePath, -1, false, false, false);
     }
 
 }

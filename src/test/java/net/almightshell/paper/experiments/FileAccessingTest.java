@@ -3,8 +3,9 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package net.almightshell.experiments;
+package net.almightshell.paper.experiments;
 
+import net.almightshell.utils.FileAccessing;
 import eu.danieldk.dictomaton.DictionaryBuilder;
 import eu.danieldk.dictomaton.PerfectHashDictionary;
 import java.io.IOException;

@@ -16,6 +16,8 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 
 /**
+ * This class represents a bucket of extendable hash function and and is also an
+ * index file in HDFS
  *
  * @author Shell
  */

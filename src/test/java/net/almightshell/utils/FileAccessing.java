@@ -3,7 +3,7 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package net.almightshell.experiments;
+package net.almightshell.utils;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -11,24 +11,17 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.List;
-import static junit.framework.Assert.assertTrue;
 import net.almightshell.pf.PerfectFile;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.HarFileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.MapFile;
-import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.tools.HadoopArchives;
-import org.apache.hadoop.util.Shell;
-import org.apache.hadoop.util.ToolRunner;
 
 /**
  *
@@ -82,10 +75,10 @@ public class FileAccessing {
             writer.println("MapFile : " + time + " ms");
 
             time = processPF();
-            writer.println("EFile : " + time + " ms");
+            writer.println("PF : " + time + " ms");
 
             time = processPF();
-            writer.println("EFile : " + time + " ms");
+            writer.println("PF : " + time + " ms");
 
         }
     }
