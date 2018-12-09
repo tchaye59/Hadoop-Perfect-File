@@ -158,13 +158,16 @@ public class PaperTestsHolder {
 
     public ExperimentResult processAccess(int fileNumber, boolean random) throws FileNotFoundException, IOException, Exception {
 
-        if (random) {
-            Collections.shuffle(fileNameList, new Random(System.nanoTime()));
-        }
-        if (fileNumber >= fileNameList.size()) {
-            fileNameSubList = fileNameList;
-        } else {
-            fileNameSubList = fileNameList.subList(0, fileNumber);
+        if (fileNumber > 0) {
+            if (random) {
+                Collections.shuffle(fileNameList, new Random(System.nanoTime()));
+            }
+            if (fileNumber >= fileNameList.size()) {
+                fileNameSubList = fileNameList;
+            } else {
+                fileNameSubList = fileNameList.subList(0, fileNumber);
+            }
+
         }
 
         ExperimentResult result = new ExperimentResult();
@@ -417,7 +420,7 @@ public class PaperTestsHolder {
     }
 
     public void clean() throws IOException {
-        Path path = new Path(hdfsDataPath);
+        Path path = new Path(hdfsFilesPath);
         if (fs.exists(path)) {
             fs.delete(path, true);
         }

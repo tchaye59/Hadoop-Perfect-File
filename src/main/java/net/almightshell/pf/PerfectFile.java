@@ -191,7 +191,7 @@ public class PerfectFile {
 
             for (FileStatus fse : fses) {
                 put(out, fse);
-                
+
                 if (remainPart <= 0) {
                     remainPart -= fse.getLen();
                     currentDataPartPath = newPartFile();
@@ -262,14 +262,13 @@ public class PerfectFile {
             } else {
                 be = getEntryFromBucket(keyHash);
             }
+            if (isCacheEnabled()) {
+                cache.put(keyHash, be);
+            }
         }
 
         if (be == null) {
             throw new FileNotFoundException(key + " not found in " + filePath.getName());
-        }
-
-        if (isCacheEnabled()) {
-            cache.put(keyHash, be);
         }
 
         return getBytes(be);

@@ -52,7 +52,8 @@ public class PaperTests {
         conf.setBoolean("dfs.support.append", true);
         FileSystem fs = FileSystem.get(conf);
 
-        int[] datasets = new int[]{10000, 20000, 40000, 60000};
+//        int[] datasets = new int[]{10000, 20000, 40000, 60000};
+        int[] datasets = new int[]{100, 200, 400, 600};
         ExperimentResult[][] resultsAccess = new ExperimentResult[2][4];
         ExperimentResult[] resultsCreat = new ExperimentResult[4];
 
@@ -69,7 +70,7 @@ public class PaperTests {
             System.out.println("Random Access...");
             resultsAccess[0][i] = holder.processAccess(1000, true);
             System.out.println("Random Access with cache effects...");
-            resultsAccess[1][i] = holder.processAccess(1000, true);
+            resultsAccess[1][i] = holder.processAccess(-1, true);
 
             System.out.println("Clean experiment data");
             holder.clean();
@@ -78,58 +79,65 @@ public class PaperTests {
         }
 
         System.out.println("Generating reports ...");
-
+//metadata size
         File file = new File("E:\\hadoop-experiment\\results\\metadata.txt");
         if (!file.exists()) {
             file.createNewFile();
         }
         try (PrintWriter writer = new PrintWriter(new BufferedWriter(new FileWriter(file, true)))) {
             for (int j = 0; j < datasets.length; j++) {
-                 writer.println("DataSet: "+datasets[j]);
+                writer.println("DataSet: " + datasets[j]);
                 for (ExperimentResultItem item : resultsCreat[j].resultItems) {
-                    writer.println(item.methodname+" : "+(item.nameNodeMetadataUsage/(2*1024))+"MB");
+                    writer.println(item.methodname + " : " + (item.nameNodeMetadataUsage) + " Bytes");
                 }
+                writer.println("----------------------------------");
+                writer.println("----------------------------------");
             }
+
         }
-        
-        
+
         file = new File("E:\\hadoop-experiment\\results\\creation.txt");
         if (!file.exists()) {
             file.createNewFile();
         }
         try (PrintWriter writer = new PrintWriter(new BufferedWriter(new FileWriter(file, true)))) {
             for (int j = 0; j < datasets.length; j++) {
-                 writer.println("DataSet: "+datasets[j]);
+                writer.println("DataSet: " + datasets[j]);
                 for (ExperimentResultItem item : resultsCreat[j].resultItems) {
-                    writer.println(item.methodname+" : "+item.duration+" ms");
+                    writer.println(item.methodname + " : " + item.duration + " ms");
                 }
+                writer.println("----------------------------------");
+                writer.println("----------------------------------");
             }
         }
-        
-        
+
         file = new File("E:\\hadoop-experiment\\results\\access1.txt");
         if (!file.exists()) {
             file.createNewFile();
         }
         try (PrintWriter writer = new PrintWriter(new BufferedWriter(new FileWriter(file, true)))) {
             for (int j = 0; j < datasets.length; j++) {
-                 writer.println("DataSet: "+datasets[j]);
+                writer.println("DataSet: " + datasets[j]);
                 for (ExperimentResultItem item : resultsAccess[0][j].resultItems) {
-                    writer.println(item.methodname+" : "+item.duration+" ms");
+                    writer.println(item.methodname + " : " + item.duration + " ms");
                 }
+                writer.println("----------------------------------");
+                writer.println("----------------------------------");
             }
         }
-        
+
         file = new File("E:\\hadoop-experiment\\results\\access2.txt");
         if (!file.exists()) {
             file.createNewFile();
         }
         try (PrintWriter writer = new PrintWriter(new BufferedWriter(new FileWriter(file, true)))) {
             for (int j = 0; j < datasets.length; j++) {
-                 writer.println("DataSet: "+datasets[j]);
+                writer.println("DataSet: " + datasets[j]);
                 for (ExperimentResultItem item : resultsAccess[1][j].resultItems) {
-                    writer.println(item.methodname+" : "+item.duration+" ms");
+                    writer.println(item.methodname + " : " + item.duration + " ms");
                 }
+                writer.println("----------------------------------");
+                writer.println("----------------------------------");
             }
         }
 
