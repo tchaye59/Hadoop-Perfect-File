@@ -157,7 +157,7 @@ public class FileCreat {
         PerfectFile ef = PerfectFile.newFile(conf, path, 100, false, true);
 
         long currentTimeMillis = System.currentTimeMillis();
-        ef.putAll(new Path(dataPath + "/" + fileNumber), true);
+        ef.putAll(new Path(dataPath + "/" + fileNumber));
         long time = System.currentTimeMillis() - currentTimeMillis;
         System.out.println("processPF : " + time);
         return time;

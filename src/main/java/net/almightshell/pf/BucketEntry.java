@@ -17,11 +17,11 @@ import org.apache.hadoop.io.Writable;
  */
 public class BucketEntry implements Writable {
 
-    public static final int RECORD_SIZE = 3 * Integer.BYTES + 1 * Long.BYTES;
+    public static final int RECORD_SIZE = 2 * Integer.BYTES + 2 * Long.BYTES;
 
     private long fileNameHash;
     private int partFilePosition;
-    private int offset;
+    private long offset;
     private int size;
 
     public BucketEntry() {
@@ -38,7 +38,7 @@ public class BucketEntry implements Writable {
     public void write(DataOutput out) throws IOException {
         out.writeLong(fileNameHash);
         out.writeInt(partFilePosition);
-        out.writeInt(offset);
+        out.writeLong(offset);
         out.writeInt(size);
     }
 
@@ -46,7 +46,7 @@ public class BucketEntry implements Writable {
     public void readFields(DataInput in) throws IOException {
         fileNameHash = in.readLong();
         partFilePosition = in.readInt();
-        offset = in.readInt();
+        offset = in.readLong();
         size = in.readInt();
     }
 
@@ -66,11 +66,11 @@ public class BucketEntry implements Writable {
         this.partFilePosition = partFilePosition;
     }
 
-    public int getOffset() {
+    public long getOffset() {
         return offset;
     }
 
-    public void setOffset(int offset) {
+    public void setOffset(long offset) {
         this.offset = offset;
     }
 

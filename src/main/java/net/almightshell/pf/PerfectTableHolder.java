@@ -28,8 +28,8 @@ public class PerfectTableHolder {
     }
 
     /**
-     * This function use the minimal perfect hash dictionary to get the position
-     * of a file index record in the index file
+     * This function use the minimal perfect hash dictionary to getInputStream the position
+ of a file index record in the index file
      *
      * @param bucket
      * @param entryHash
