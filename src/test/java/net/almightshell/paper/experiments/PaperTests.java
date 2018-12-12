@@ -9,21 +9,15 @@ import net.almightshell.utils.PaperTestsHolder;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
-import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.List;
-import net.almightshell.pf.BucketEntry;
 import net.almightshell.utils.PaperTestsHolder.ExperimentResult;
 import net.almightshell.utils.PaperTestsHolder.ExperimentResultItem;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FsUrlStreamHandlerFactory;
 import org.apache.hadoop.fs.HarFileSystem;
 import org.apache.hadoop.fs.LocalFileSystem;
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.junit.Test;
 
@@ -236,8 +230,8 @@ public class PaperTests {
         System.out.println(holder.accessFromHAR());
 
         System.out.println(holder.accessFromHPF());
+        System.out.println(holder.accessFromHPF());
 
     }
-
 
 }

@@ -24,7 +24,7 @@ import org.apache.hadoop.io.Writable;
  *
  * @author Shell
  */
-public class PerfectTableHolder implements Writable{
+public class PerfectTableHolder implements Writable {
 
     private final HashMap<String, HollowTrieMonotoneMinimalPerfectHashFunction> map = new HashMap<>();
     private PerfectFile pFile = null;
@@ -44,12 +44,15 @@ public class PerfectTableHolder implements Writable{
      */
     public long get(Bucket bucket, long entryHash) throws IOException {
         String dicName = bucket.getPath().getName();
-        if (!map.containsKey(dicName)) {
-            return reloadBucketDictionary(bucket).getLong( toBitVector(entryHash));
+        LongArrayBitVector bv = toBitVector(entryHash);
+        
+        HollowTrieMonotoneMinimalPerfectHashFunction htmmphf = map.get(dicName);
+        if (htmmphf==null) {
+            return reloadBucketDictionary(bucket).getLong(bv);
         }
-        long x = map.get(dicName).getLong( toBitVector(entryHash));
+        long x = map.get(dicName).getLong(bv);
         if (x < 0) {
-            return reloadBucketDictionary(bucket).getLong( toBitVector(entryHash));
+            return reloadBucketDictionary(bucket).getLong(bv);
         }
         return x;
     }
@@ -63,7 +66,7 @@ public class PerfectTableHolder implements Writable{
      * @throws DictionaryBuilderException
      */
     public HollowTrieMonotoneMinimalPerfectHashFunction reloadBucketDictionary(Bucket bucket) throws IOException {
-        final HollowTrieMonotoneMinimalPerfectHashFunction<BitVector> htmmphf = new HollowTrieMonotoneMinimalPerfectHashFunction(listOf(getAllFileNamesFromBucket(bucket)).iterator(), TransformationStrategies.identity());
+        final HollowTrieMonotoneMinimalPerfectHashFunction<LongArrayBitVector> htmmphf = new HollowTrieMonotoneMinimalPerfectHashFunction(listOf(getAllFileNamesFromBucket(bucket)).iterator(), TransformationStrategies.identity());
         map.put(bucket.getPath().getName(), htmmphf);
         return htmmphf;
     }
@@ -124,9 +127,9 @@ public class PerfectTableHolder implements Writable{
     public void readFields(DataInput in) throws IOException {
         int size = in.readInt();
         map.clear();
-        while (size>0) {            
+        while (size > 0) {
             try {
-                map.put(Text.readString(in), (HollowTrieMonotoneMinimalPerfectHashFunction) BinIO.loadObject((InputStream)in));
+                map.put(Text.readString(in), (HollowTrieMonotoneMinimalPerfectHashFunction) BinIO.loadObject((InputStream) in));
             } catch (ClassNotFoundException ex) {
                 Logger.getLogger(PerfectTableHolder.class.getName()).log(Level.SEVERE, null, ex);
             }
