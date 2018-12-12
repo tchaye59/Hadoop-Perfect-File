@@ -31,11 +31,9 @@ public class PerfectFileMetadata implements Writable {
     private PerfectTableHolder perfectTableHolder = null;
     private PerfectFile pFile = null;
 
-    public PerfectFileMetadata(PerfectFile pFile, boolean perfectModeEnabled) {
+    public PerfectFileMetadata(PerfectFile pFile) {
         this.pFile = pFile;
-        if (perfectModeEnabled) {
-            perfectTableHolder = new PerfectTableHolder(pFile);
-        }
+        perfectTableHolder = new PerfectTableHolder(pFile);
     }
 
     @Override
@@ -46,12 +44,7 @@ public class PerfectFileMetadata implements Writable {
         out.writeUTF(currentDataPart);
         out.writeShort(repl);
         directory.write(out);
-
-        BytesWritable bw = new BytesWritable();
-        if (perfectTableHolder != null) {
-            bw.set(new BytesWritable(PerfectFilesUtil.toObjectStream(new PerfectHashDictionaryBean(perfectTableHolder.getMap()))));
-        }
-        bw.write(out);
+        perfectTableHolder.write(out);
     }
 
     @Override
@@ -62,18 +55,7 @@ public class PerfectFileMetadata implements Writable {
         currentDataPart = in.readUTF();
         repl = in.readShort();
         directory.readFields(in);
-
-        BytesWritable bw = new BytesWritable();
-        bw.readFields(in);
-
-        if (perfectTableHolder != null) {
-            try {
-                perfectTableHolder.setMap(PerfectFilesUtil.toObject(bw.getBytes(), PerfectHashDictionaryBean.class).getMap());
-            
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
+        perfectTableHolder.readFields(in);
     }
 
     public int getBucketCapacity() {

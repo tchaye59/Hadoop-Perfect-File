@@ -12,11 +12,11 @@
             <artifactId>hadoop-mapreduce-client-core</artifactId>
             <version>2.9.1</version>
         </dependency>-->
-        <dependency>
+        <!--        <dependency>
             <groupId>eu.danieldk.dictomaton</groupId>
             <artifactId>dictomaton</artifactId>
             <version>1.1.1</version>
-        </dependency>
+        </dependency>-->
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-client</artifactId>
@@ -56,15 +56,15 @@
             <groupId>it.unimi.dsi</groupId>
             <artifactId>sux4j</artifactId>
             <version>4.0.0</version>
-            <scope>runtime</scope>
+            <!--<scope>runtime</scope>-->
         </dependency>
         
         <!-- https://mvnrepository.com/artifact/org.apache.commons/commons-math3 -->
-        <dependency>
+        <!--        <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-math3</artifactId>
             <version>3.2</version>
-        </dependency>
+        </dependency>-->
     </dependencies>
     
     <repositories>

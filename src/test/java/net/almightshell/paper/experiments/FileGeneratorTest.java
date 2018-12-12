@@ -16,7 +16,7 @@ public class FileGeneratorTest {
 
     @org.junit.Test
     public void generate() throws IOException {
-        FileGenerator generator = new FileGenerator((long) (.2 * 1024 * 1024l), "E:\\hadoop-experiment\\data", 60000);
+        FileGenerator generator = new FileGenerator((long) (10 * 1024 * 1024l), "E:\\hadoop-experiment\\data", 1000);
         generator.generate();
     }
     

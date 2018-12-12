@@ -23,6 +23,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.HarFileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.IOUtils;
@@ -113,6 +114,17 @@ public class PaperTestsHolder {
 
     }
 
+    public ExperimentResult processUploadDataSets() throws FileNotFoundException, IOException, Exception {
+        ExperimentResult result = new ExperimentResult();
+
+        ExperimentResultItem resultItem = null;
+
+        System.out.println("->Upload Files from HDFS");
+        resultItem = uploadToHDFS();
+        result.resultItems.add(resultItem);
+        return result;
+    }
+
     public ExperimentResult processCreat() throws FileNotFoundException, IOException, Exception {
         ExperimentResult result = new ExperimentResult();
 
@@ -125,11 +137,6 @@ public class PaperTestsHolder {
         System.out.println("Starting the archives Creation test...");
 
         try (PrintWriter writer = new PrintWriter(new BufferedWriter(new FileWriter(file, true)))) {
-
-            System.out.println("->Upload Files from HDFS");
-            resultItem = uploadToHDFS();
-            result.resultItems.add(resultItem);
-            printLog(resultItem, writer, true);
 
             System.out.println("->HAR : Creation");
             resultItem = creatHAR();
@@ -240,12 +247,15 @@ public class PaperTestsHolder {
         return resultItem;
 
     }
+    
+    
+    
 
     public ExperimentResultItem uploadToHDFS() throws IOException {
 
         Path outPutDir = new Path(hdfsFilesPath);
         if (fs.exists(outPutDir)) {
-            fs.delete(outPutDir, true);
+            return null;
         }
 
         long currentTimeMillis = System.currentTimeMillis();
@@ -277,9 +287,11 @@ public class PaperTestsHolder {
 
         try (MapFile.Writer writer = new MapFile.Writer(conf, path, wKeyOpt, wValueOpt)) {
             for (FileStatus status : fs.listStatus(new Path(hdfsFilesPath))) {
-                byte[] bs = new byte[(int) status.getLen()];
-                fs.open(status.getPath()).readFully(bs);
-                writer.append(new Text(status.getPath().getName()), new BytesWritable(bs));
+                if (status.isFile()) {
+                    byte[] bs = new byte[(int) status.getLen()];
+                    fs.open(status.getPath()).readFully(bs);
+                    writer.append(new Text(status.getPath().getName()), new BytesWritable(bs));
+                }
             }
         }
 
@@ -301,7 +313,7 @@ public class PaperTestsHolder {
             fs.delete(path, true);
         }
 
-        PerfectFile pf = PerfectFile.newFile(conf, path, 10000, false, true);
+        PerfectFile pf = PerfectFile.newFile(conf, path, 10000);
 
         long currentTimeMillis = System.currentTimeMillis();
         pf.putAll(new Path(hdfsFilesPath));
@@ -392,7 +404,7 @@ public class PaperTestsHolder {
     public ExperimentResultItem accessFromHPF() throws IOException, Exception {
 
         if (hpf == null) {
-            hpf = PerfectFile.open(conf, new Path(hpFilePath), true, true);
+            hpf = PerfectFile.open(conf, new Path(hpFilePath));
         }
 
         long currentTimeMillis = System.currentTimeMillis();
@@ -420,10 +432,9 @@ public class PaperTestsHolder {
     }
 
     public void clean() throws IOException {
-        Path path = new Path(hdfsFilesPath);
-        if (fs.exists(path)) {
-            fs.delete(path, true);
-        }
+//            fs.delete(new Path(harFilePath), true);
+//            fs.delete(new Path(mapFilePath), true);
+//            fs.delete(new Path(hpFilePath), true);
     }
 
     /**

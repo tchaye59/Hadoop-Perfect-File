@@ -7,7 +7,6 @@ package net.almightshell.pf;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
-import eu.danieldk.dictomaton.DictionaryBuilderException;
 import java.io.ByteArrayInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -64,9 +63,9 @@ public class PerfectFile {
     private Path currentDataPartPath = null;
     private Cache<Long, BucketEntry> cache = null;
     private boolean cacheEnabled = true;
-    private boolean perfectModeEnabled = false;
+    private boolean perfectModeEnabled = true;
 
-    private PerfectFile(Configuration conf, Path filePath, int bucketCapacity, boolean newFile, boolean cacheEnabled, boolean perfectModeEnabled) throws IOException, Exception {
+    private PerfectFile(Configuration conf, Path filePath, int bucketCapacity, boolean newFile) throws IOException, Exception {
         this.conf = conf;
         this.filePath = filePath;
         this.cacheEnabled = cacheEnabled;
@@ -74,7 +73,8 @@ public class PerfectFile {
 
         fs = FileSystem.get(conf);
         lfs = LocalFileSystem.getLocal(conf);
-        metadata = new PerfectFileMetadata(this, perfectModeEnabled);
+        metadata = new PerfectFileMetadata(this);
+        metadata.setRepl((short) conf.getInt("dfs.replication", 3));
 
         if (isCacheEnabled()) {
             cache = CacheBuilder.newBuilder()
@@ -149,7 +149,7 @@ public class PerfectFile {
      * @throws IOException
      * @throws DictionaryBuilderException
      */
-    public void put(Path path) throws IOException, DictionaryBuilderException {
+    public void put(Path path) throws IOException {
         if (fs.getUsed(currentDataPartPath) >= partMaxSize) {
             currentDataPartPath = newPartFile();
             metadata.setCurrentDataPartPath(currentDataPartPath.getName());
@@ -160,13 +160,13 @@ public class PerfectFile {
         }
 
         List<Bucket> buckets = flushBucketsData();
-        for (Bucket bucket : buckets) {
+        for (Bucket bucket : buckets) { 
             metadata.getPerfectTableHolder().reloadBucketDictionary(bucket);
         }
         writeMetadata();
     }
 
-    public void putFromLocal(Path path) throws IOException, DictionaryBuilderException {
+    public void putFromLocal(Path path) throws IOException {
         if (fs.getUsed(currentDataPartPath) >= partMaxSize) {
             currentDataPartPath = newPartFile();
             metadata.setCurrentDataPartPath(currentDataPartPath.getName());
@@ -183,13 +183,16 @@ public class PerfectFile {
         writeMetadata();
     }
 
-    public void putAll(Path dirpath) throws IOException, DictionaryBuilderException {
+    public void putAll(Path dirpath) throws IOException {
         FileStatus[] fses = fs.listStatus(dirpath);
 
         try (FSDataOutputStream out = fs.append(currentDataPartPath)) {
             long remainPart = partMaxSize - fs.getUsed(currentDataPartPath);
 
             for (FileStatus fse : fses) {
+                if (fse.isDirectory()) {
+                    continue;
+                }
                 put(out, fse);
 
                 if (remainPart <= 0) {
@@ -206,7 +209,7 @@ public class PerfectFile {
         writeMetadata();
     }
 
-    public void putAllFromLocal(Path dirpath, boolean recursive) throws IOException, DictionaryBuilderException {
+    public void putAllFromLocal(Path dirpath, boolean recursive) throws IOException {
 
         FileStatus[] fses = lfs.listStatus(dirpath);
 
@@ -247,7 +250,7 @@ public class PerfectFile {
         return files;
     }
 
-    public byte[] getBytes(String key) throws IOException, DictionaryBuilderException {
+    public byte[] getBytes(String key) throws IOException {
         BucketEntry be = null;
         long keyHash = PerfectFilesUtil.getHash(key);
 
@@ -274,7 +277,7 @@ public class PerfectFile {
         return getBytes(be);
     }
 
-    public InputStream get(String key) throws IOException, DictionaryBuilderException {
+    public InputStream get(String key) throws IOException {
         return new ByteArrayInputStream(getBytes(key));
     }
 
@@ -327,9 +330,7 @@ public class PerfectFile {
 
                     bes.addAll(b.getNewEntry1s());
 
-                    bes.sort((x, y) -> {
-                        return String.valueOf(x.getFileNameHash()).compareTo(String.valueOf(y.getFileNameHash()));
-                    });
+                    bes.sort((x, y) -> PerfectTableHolder.compare(x.getFileNameHash(), y.getFileNameHash()));
 
                     try (FSDataOutputStream out = fs.append(newPartFile(b.getPath(), true))) {
                         for (BucketEntry be : bes) {
@@ -367,21 +368,24 @@ public class PerfectFile {
         return null;
     }
 
-    private BucketEntry getEntryFromBucketByPerfectTable(long keyHash) throws IOException, DictionaryBuilderException {
+    private BucketEntry getEntryFromBucketByPerfectTable(long keyHash) throws IOException {
         Bucket bucket = metadata.getDirectory().getBucketByEntryKey(keyHash);
         //read the index record
 
-        int pos = metadata.getPerfectTableHolder().get(bucket, keyHash);
+        long pos = metadata.getPerfectTableHolder().get(bucket, keyHash);
 
         if (pos < 0) {
             return null;
         }
-        long offSet = (pos - 1) * BucketEntry.RECORD_SIZE;
+        long offSet = pos * BucketEntry.RECORD_SIZE;
 
         BucketEntry entry = new BucketEntry();
         try (FSDataInputStream in = fs.open(bucket.getPath())) {
             in.seek(offSet);
             entry.readFields(in);
+        }
+        if (entry.getFileNameHash() != keyHash) {
+            return null;
         }
         return entry;
     }
@@ -544,44 +548,19 @@ public class PerfectFile {
         return fs;
     }
 
-    public static PerfectFile newFile(Configuration conf, Path filePath, int bucketCapacity, boolean cacheEnabled, boolean perfectModeEnabled) throws IOException, Exception {
-        return new PerfectFile(conf, filePath, bucketCapacity, true, cacheEnabled, perfectModeEnabled);
-    }
-
     public static PerfectFile newFile(Configuration conf, Path filePath, int bucketCapacity) throws IOException, Exception {
-        return new PerfectFile(conf, filePath, bucketCapacity, true, false, false);
-    }
-
-    public static PerfectFile newFile(Configuration conf, Path filePath, boolean cacheEnabled) throws IOException, Exception {
-        return new PerfectFile(conf, filePath, -1, true, cacheEnabled, false);
+        return new PerfectFile(conf, filePath, bucketCapacity, true);
     }
 
     public static PerfectFile newFile(Configuration conf, Path filePath) throws IOException, Exception {
-        return new PerfectFile(conf, filePath, -1, true, false, false);
-    }
-
-    public static PerfectFile open(Configuration conf, Path filePath, int bucketCapacity, boolean cacheEnabled, boolean perfectModeEnabled) throws IOException, Exception {
-        return new PerfectFile(conf, filePath, bucketCapacity, false, cacheEnabled, perfectModeEnabled);
-    }
-
-    public static PerfectFile open(Configuration conf, Path filePath, boolean cacheEnabled, boolean perfectModeEnabled) throws IOException, Exception {
-        return new PerfectFile(conf, filePath, -1, false, cacheEnabled, perfectModeEnabled);
+        return new PerfectFile(conf, filePath, -1, true);
     }
 
     public static PerfectFile open(Configuration conf, Path filePath, int bucketCapacity) throws IOException, Exception {
-        return new PerfectFile(conf, filePath, bucketCapacity, false, false, false);
-    }
-
-    public static PerfectFile open(Configuration conf, Path filePath, int bucketCapacity, boolean cacheEnabled) throws IOException, Exception {
-        return new PerfectFile(conf, filePath, bucketCapacity, false, cacheEnabled, false);
-    }
-
-    public static PerfectFile open(Configuration conf, Path filePath, boolean cacheEnabled) throws IOException, Exception {
-        return new PerfectFile(conf, filePath, -1, false, cacheEnabled, true);
+        return new PerfectFile(conf, filePath, bucketCapacity, false);
     }
 
     public static PerfectFile open(Configuration conf, Path filePath) throws IOException, Exception {
-        return new PerfectFile(conf, filePath, -1, false, false, false);
+        return new PerfectFile(conf, filePath, -1, false);
     }
-
 }
