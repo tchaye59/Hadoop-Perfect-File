@@ -29,7 +29,10 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.ByteWritable;
+import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.IOUtils;
+import org.apache.hadoop.io.IntWritable;
 
 /**
  *
@@ -61,27 +64,21 @@ public class PerfectFile {
 
     PerfectFileMetadata metadata = null;
     private Path currentDataPartPath = null;
-    private Cache<Long, BucketEntry> cache = null;
-    private boolean cacheEnabled = true;
-    private boolean perfectModeEnabled = true;
+    private Cache<Long, BucketEntry> cache = CacheBuilder.newBuilder()
+            .maximumSize(10000)
+            .expireAfterWrite(24, TimeUnit.HOURS)
+            .build();
+
+    ;
 
     private PerfectFile(Configuration conf, Path filePath, int bucketCapacity, boolean newFile) throws IOException, Exception {
         this.conf = conf;
         this.filePath = filePath;
-        this.cacheEnabled = cacheEnabled;
-        this.perfectModeEnabled = perfectModeEnabled;
 
         fs = FileSystem.get(conf);
         lfs = LocalFileSystem.getLocal(conf);
         metadata = new PerfectFileMetadata(this);
         metadata.setRepl((short) conf.getInt("dfs.replication", 3));
-
-        if (isCacheEnabled()) {
-            cache = CacheBuilder.newBuilder()
-                    .maximumSize(10000)
-                    .expireAfterWrite(24, TimeUnit.HOURS)
-                    .build();
-        }
 
         if (newFile) {
             if (fs.exists(filePath)) {
@@ -114,11 +111,21 @@ public class PerfectFile {
         be.setPartFilePosition(metadata.getUsedPartFilePosition());
         be.setOffset(out.getPos());
 
+        //read file content
+        byte[] bs = new byte[(int) status.getLen()];
         try (FSDataInputStream in = fs.open(status.getPath())) {
-            IOUtils.copyBytes(in, out, conf, false);
+            in.readFully(bs);
         }
-        be.setSize((int) (out.getPos() - be.getOffset()));
 
+        //Compress the file data
+        BytesWritable bw = new BytesWritable(PerfectFilesUtil.compress(bs));
+        IntWritable iw = new IntWritable(bs.length);
+
+        //write data
+        iw.write(out);
+        bw.write(out);
+
+        be.setSize((int) (out.getPos() - be.getOffset()));
         addBucketEntry(be);
     }
 
@@ -160,7 +167,7 @@ public class PerfectFile {
         }
 
         List<Bucket> buckets = flushBucketsData();
-        for (Bucket bucket : buckets) { 
+        for (Bucket bucket : buckets) {
             metadata.getPerfectTableHolder().reloadBucketDictionary(bucket);
         }
         writeMetadata();
@@ -251,29 +258,19 @@ public class PerfectFile {
     }
 
     public byte[] getBytes(String key) throws IOException {
-        BucketEntry be = null;
         long keyHash = PerfectFilesUtil.getHash(key);
 
         //get metadata from cache
-        if (isCacheEnabled()) {
-            be = cache.getIfPresent(keyHash);
-        }
+        BucketEntry be = cache.getIfPresent(keyHash);
 
         if (be == null) {
-            if (isPerfectModeEnabled()) {
-                be = getEntryFromBucketByPerfectTable(keyHash);
-            } else {
-                be = getEntryFromBucket(keyHash);
-            }
-            if (isCacheEnabled()) {
-                cache.put(keyHash, be);
-            }
+            be = getEntryFromBucketByPerfectTable(keyHash);
+            cache.put(keyHash, be);
         }
 
         if (be == null) {
             throw new FileNotFoundException(key + " not found in " + filePath.getName());
         }
-
         return getBytes(be);
     }
 
@@ -282,12 +279,22 @@ public class PerfectFile {
     }
 
     public byte[] getBytes(BucketEntry entry) throws IOException {
-        byte[] b = new byte[entry.getSize()];
+        byte[] bs;
+        int compressedDataSize;
         try (FSDataInputStream in = fs.open(getPartFilePath(entry.getPartFilePosition()))) {
             in.seek(entry.getOffset());
-            in.readFully(b);
+
+            //read lenght
+            IntWritable iw = new IntWritable();
+            iw.readFields(in);
+
+            BytesWritable bw = new BytesWritable();
+            bw.readFields(in);
+
+            compressedDataSize = iw.get();
+            bs = bw.getBytes();
         }
-        return b;
+        return PerfectFilesUtil.decompress(bs, compressedDataSize);
     }
 
     /**
@@ -310,11 +317,6 @@ public class PerfectFile {
         //split the bucket if full
         if (bucket.getSize() > metadata.getBucketCapacity()) {
             splitBucket(bucket, entry.getFileNameHash());
-        }
-
-        //add metadata to cache
-        if (isCacheEnabled()) {
-            cache.put(entry.getFileNameHash(), entry);
         }
     }
 
@@ -384,10 +386,8 @@ public class PerfectFile {
             in.seek(offSet);
             entry.readFields(in);
         }
-        if (entry.getFileNameHash() != keyHash) {
-            return null;
-        }
-        return entry;
+
+        return entry.getFileNameHash() != keyHash ? null : entry;
     }
 
     private List<BucketEntry> getBucketAllEntries(Bucket bucket) throws IOException {
@@ -499,22 +499,6 @@ public class PerfectFile {
                 metadata.readFields(in);
             }
         }
-    }
-
-    public boolean isCacheEnabled() {
-        return cacheEnabled;
-    }
-
-    public void setCacheEnabled(boolean cacheEnabled) {
-        this.cacheEnabled = cacheEnabled;
-    }
-
-    public boolean isPerfectModeEnabled() {
-        return perfectModeEnabled;
-    }
-
-    public void setPerfectModeEnabled(boolean perfectModeEnabled) {
-        this.perfectModeEnabled = perfectModeEnabled;
     }
 
     private Path getMetadataPath() {

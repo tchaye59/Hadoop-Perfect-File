@@ -52,6 +52,9 @@ public class Directory implements Writable {
     }
 
     public Bucket getBucketByEntryKey(long key) {
+        if (buckets.size() == 1) {
+            return buckets.get(0);
+        }
         return getBucket(positionInDirectory(key));
     }
 

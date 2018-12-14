@@ -14,6 +14,10 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.math.BigInteger;
+import java.util.Arrays;
+import net.jpountz.lz4.LZ4Compressor;
+import net.jpountz.lz4.LZ4Factory;
+import net.jpountz.lz4.LZ4FastDecompressor;
 import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.io.Writable;
 
@@ -22,7 +26,30 @@ import org.apache.hadoop.io.Writable;
  * @author Shell
  */
 public class PerfectFilesUtil {
+
+    private static final LZ4Factory FACTORY = LZ4Factory.fastestInstance();
+    private static final LZ4Compressor COMPRESSOR = FACTORY.fastCompressor();
+    private static final LZ4FastDecompressor DECOMPRESSOR = FACTORY.fastDecompressor();
+
+    public static byte[] compress(byte[] data) {
+        final int decompressedLength = data.length;
+        int maxCompressedLength = COMPRESSOR.maxCompressedLength(decompressedLength);
+        byte[] compressed = new byte[maxCompressedLength];
+        int compressedLength = COMPRESSOR.compress(data, 0, decompressedLength, compressed, 0, maxCompressedLength);
+
+        if (compressed.length == compressedLength) {
+            return compressed;
+        }
+
+        return Arrays.copyOfRange(compressed, 0, compressedLength);
+    }
     
+    public static byte[] decompress (byte[] compressed,int decompressedLength) {
+        byte[] restored = new byte[decompressedLength];
+        int compressedLength2 = DECOMPRESSOR.decompress(compressed, 0, restored, 0, decompressedLength);
+        return restored;
+    }
+
     public static long getHash(String name) {
         return name.hashCode();
     }
@@ -115,8 +142,10 @@ public class PerfectFilesUtil {
     }
 
     public static int[] checkSplitPositionsInDirectory(long key, long globalDepth) {
-        String s = Long.toBinaryString(key);
-        s = s.substring((int) (s.length() - globalDepth), s.length());
+//        String s = Long.toBinaryString(key);
+//        s = s.substring((int) (s.length() - globalDepth), s.length());
+
+        String s = String.valueOf(checkPositionInDirectory(key, globalDepth));
 
         StringBuilder sb = new StringBuilder(s);
         sb.setCharAt(0, '0');
