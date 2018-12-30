@@ -141,19 +141,13 @@ public class PaperTestsHolder {
             fileNameSubList = fileNameList;
         } catch (Exception e) {
             e.printStackTrace();
-        }  
+        }
 
     }
 
-    public ExperimentResult processUploadDataSets() throws FileNotFoundException, IOException, Exception {
-        ExperimentResult result = new ExperimentResult();
-
-        ExperimentResultItem resultItem = null;
-
+    public ExperimentResultItem processUploadDataSets() throws FileNotFoundException, IOException, Exception {
         System.out.println("->Upload Files from HDFS");
-        resultItem = uploadToHDFS();
-        result.resultItems.add(resultItem);
-        return result;
+        return uploadToHDFS();
     }
 
     public ExperimentResult processCreat() throws FileNotFoundException, IOException, Exception {
@@ -169,20 +163,20 @@ public class PaperTestsHolder {
 
         try (PrintWriter writer = new PrintWriter(new BufferedWriter(new FileWriter(file, true)))) {
 
-//            System.out.println("->HAR : Creation");
-//            resultItem = creatHAR();
-//            result.resultItems.add(resultItem);
-//            printLog(resultItem, writer, true);
+            System.out.println("->HAR : Creation");
+            resultItem = creatHAR();
+            result.resultItems.add(resultItem);
+            printLog(resultItem, writer, true);
 
             System.out.println("->MapFile : Creation");
             resultItem = creatMapFile();
             result.resultItems.add(resultItem);
             printLog(resultItem, writer, true);
 
-//            System.out.println("->HPF : Creation");
-//            resultItem = creatHPF();
-//            result.resultItems.add(resultItem);
-//            printLog(resultItem, writer, true);
+            System.out.println("->HPF : Creation");
+            resultItem = creatHPF();
+            result.resultItems.add(resultItem);
+            printLog(resultItem, writer, true);
 
             writer.println();
             writer.println();
@@ -228,10 +222,11 @@ public class PaperTestsHolder {
             result.resultItems.add(resultItem);
             printLog(resultItem, writer, false);
 
-//            System.out.println("->MapFile : Access Files");
-//            resultItem = accessFromMapFile();
-//            result.resultItems.add(resultItem);
-//            printLog(resultItem, writer, false);
+            System.out.println("->MapFile : Access Files");
+            resultItem = accessFromMapFile();
+            result.resultItems.add(resultItem);
+            printLog(resultItem, writer, false);
+
             System.out.println("->HPF : Access Files");
             resultItem = accessFromHPF();
             result.resultItems.add(resultItem);
@@ -291,7 +286,7 @@ public class PaperTestsHolder {
 //        }
         FileSystem lfs;
         lfs = new Path("file:///" + localDataPath).getFileSystem(conf);
-        Arrays.asList(lfs.listStatus(new Path("file:///" + localDataPath))).parallelStream().forEach(status -> {
+        Arrays.asList(lfs.listStatus(new Path("file:///" + localDataPath))).stream().forEach(status -> {
             try {
                 Path dest = new Path(outPutDir, status.getPath().getName());
                 if (!fs.exists(dest)) {
@@ -496,12 +491,16 @@ public class PaperTestsHolder {
     public ExperimentResultItem accessFromHDFS() throws IOException {
 
         long currentTimeMillis = System.currentTimeMillis();
-         
+
         for (String name : fileNameSubList) {
-            byte[] bs ;
-            try (FSDataInputStream in = fs.open(new Path(hdfsFilesPath, name))) {
-                bs = new  byte[in.available()];
-                in.readFully(bs);
+            byte[] bs;
+            try {
+                try (FSDataInputStream in = fs.open(new Path(hdfsFilesPath, name))) {
+                    bs = new byte[in.available()];
+                    in.readFully(bs);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
             }
         }
 
@@ -516,7 +515,7 @@ public class PaperTestsHolder {
     }
 
     public ExperimentResultItem accessFromMapFile() throws IOException {
-        
+
         long currentTimeMillis = System.currentTimeMillis();
         MapFile.Reader reader = new MapFile.Reader(new Path(mapFilePath), conf);
 
@@ -584,6 +583,14 @@ public class PaperTestsHolder {
         long size = 0;
         for (FileStatus status : fs.listStatus(dirPath)) {
             size += calculateNameNodeMetadataUsage(status);
+        }
+        return size;
+    }
+
+    public long calculatePathSize(Path dirPath) throws IOException {
+        long size = 0;
+        for (FileStatus status : fs.listStatus(dirPath)) {
+            size += status.getLen();
         }
         return size;
     }

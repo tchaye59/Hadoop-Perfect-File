@@ -8,6 +8,7 @@ package net.almightshell.pf;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Writable;
@@ -25,15 +26,13 @@ public class PerfectFileMetadata implements Writable {
     /**
      * the desired replication degree; default is 3 *
      */
-    private short repl = 1;
+    private int repl = 1;
 
     private Directory directory = new Directory();
     private PerfectTableHolder perfectTableHolder = null;
-    private PerfectFile pFile = null;
 
-    public PerfectFileMetadata(PerfectFile pFile) {
-        this.pFile = pFile;
-        perfectTableHolder = new PerfectTableHolder(pFile);
+    public PerfectFileMetadata(FileSystem fs) {
+        perfectTableHolder = new PerfectTableHolder(fs);
     }
 
     @Override
@@ -42,7 +41,6 @@ public class PerfectFileMetadata implements Writable {
         out.writeInt(indexLastPosition);
         out.writeInt(usedPartFilePosition);
         out.writeUTF(currentDataPart);
-        out.writeShort(repl);
         directory.write(out);
         perfectTableHolder.write(out);
     }
@@ -53,7 +51,6 @@ public class PerfectFileMetadata implements Writable {
         indexLastPosition = in.readInt();
         usedPartFilePosition = in.readInt();
         currentDataPart = in.readUTF();
-        repl = in.readShort();
         directory.readFields(in);
         perfectTableHolder.readFields(in);
     }
@@ -69,11 +66,11 @@ public class PerfectFileMetadata implements Writable {
         this.bucketCapacity = bucketCapacity;
     }
 
-    public short getRepl() {
+    public int getRepl() {
         return repl;
     }
 
-    public void setRepl(short repl) {
+    public void setRepl(int repl) {
         this.repl = repl;
     }
 

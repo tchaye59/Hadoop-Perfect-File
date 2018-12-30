@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 
@@ -27,10 +28,10 @@ import org.apache.hadoop.io.Writable;
 public class PerfectTableHolder implements Writable {
 
     private final HashMap<String, HollowTrieMonotoneMinimalPerfectHashFunction> map = new HashMap<>();
-    private PerfectFile pFile = null;
+    private FileSystem fs = null;
 
-    PerfectTableHolder(PerfectFile pFile) {
-        this.pFile = pFile;
+    PerfectTableHolder(FileSystem fs) {
+        this.fs = fs;
     }
 
     /**
@@ -81,7 +82,7 @@ public class PerfectTableHolder implements Writable {
     private Long[] getAllFileNamesFromBucket(Bucket bucket) throws IOException {
         List<Long> keysList = new ArrayList<>();
         //read the perfect file  records
-        try (FSDataInputStream in = pFile.getFs().open(bucket.getPath())) {
+        try (FSDataInputStream in = fs.open(bucket.getPath())) {
             while (in.available() > 0) {
                 BucketEntry be = new BucketEntry();
                 be.readFields(in);

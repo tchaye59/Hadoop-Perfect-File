@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.FileSystemException;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -22,6 +23,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_KEY;
+import org.apache.hadoop.fs.CreateFlag;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileAlreadyExistsException;
@@ -29,6 +31,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.io.ByteWritable;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.IOUtils;
@@ -40,10 +43,11 @@ import org.apache.hadoop.io.IntWritable;
  */
 public class PerfectFile {
 
-    private static final Log LOG = LogFactory.getLog(PerfectFile.class);
-    private static final String INDEX_NAME = "index-";
-    private static final String PART_NAME = "part-";
-    private static final String METADATA_NAME = "metadata";
+    public static final Log LOG = LogFactory.getLog(PerfectFile.class);
+    public static final String INDEX_NAME = "index-";
+    public static final String TEMPORARY_INDEX_NAME = "temopraryIndex";
+    public static final String PART_NAME = "part-";
+    public static final String METADATA_NAME = "metadata";
 
     /**
      * size of each part file size *
@@ -77,7 +81,7 @@ public class PerfectFile {
 
         fs = FileSystem.get(conf);
         lfs = LocalFileSystem.getLocal(conf);
-        metadata = new PerfectFileMetadata(this);
+        metadata = new PerfectFileMetadata(fs);
         metadata.setRepl((short) conf.getInt("dfs.replication", 3));
 
         if (newFile) {
@@ -334,7 +338,7 @@ public class PerfectFile {
 
                     bes.sort((x, y) -> PerfectTableHolder.compare(x.getFileNameHash(), y.getFileNameHash()));
 
-                    try (FSDataOutputStream out = fs.append(newPartFile(b.getPath(), true))) {
+                    try (FSDataOutputStream out = fs.append(newFile(b.getPath(), true))) {
                         for (BucketEntry be : bes) {
                             be.write(out);
                         }
@@ -456,7 +460,7 @@ public class PerfectFile {
         bucket.setLocalDepth(metadata.getDirectory().getGlobalDepth());
         bucket.setPath(new Path(filePath, INDEX_NAME + position));
 
-        fs.create(bucket.getPath(), false, conf.getInt(IO_FILE_BUFFER_SIZE_KEY, IO_FILE_BUFFER_SIZE_DEFAULT), metadata.getRepl(), indexBlockSize).close();
+        fs.create(bucket.getPath(), false, conf.getInt(IO_FILE_BUFFER_SIZE_KEY, IO_FILE_BUFFER_SIZE_DEFAULT), (short) metadata.getRepl(), indexBlockSize).close();
 
         metadata.setIndexLastPosition(position);
         return bucket;
@@ -477,16 +481,57 @@ public class PerfectFile {
 
     private Path newPartFile(int position, boolean overwrite) throws IOException {
         Path p = getPartFilePath(position);
-        return newPartFile(p, overwrite);
+        return newFile(p, overwrite);
+    }
+    
+    
+
+    private FSDataOutputStream getInputInLazyPersist(Path path) throws IOException {
+        return getInputInLazyPersist(path,true,false);
+    }
+    
+     private FSDataOutputStream getInputInLazyPersist(Path path,boolean lazyPersist, boolean overwrite) throws IOException {
+        return getInputInLazyPersist(path,lazyPersist,overwrite,
+                conf.getInt(IO_FILE_BUFFER_SIZE_KEY, IO_FILE_BUFFER_SIZE_DEFAULT),
+                blockSize,
+                metadata.getRepl());
     }
 
-    private Path newPartFile(Path p, boolean overwrite) throws IOException {
-        fs.create(p, overwrite, conf.getInt(IO_FILE_BUFFER_SIZE_KEY, IO_FILE_BUFFER_SIZE_DEFAULT), metadata.getRepl(), blockSize).close();
+    private FSDataOutputStream getInputInLazyPersist(Path path, boolean lazyPersist, boolean overwrite, int bufferLength, long blockSize, int replicationFactor) throws IOException {
+
+        if (fs.exists(path)) {
+            if (overwrite) {
+                fs.delete(path, true);
+            } else {
+                return fs.append(path, bufferLength);
+            }
+        }
+        if (lazyPersist) {
+            return fs.create(
+                    path,
+                    FsPermission.getFileDefault(),
+                    EnumSet.of(CreateFlag.CREATE, CreateFlag.LAZY_PERSIST),
+                    conf.getInt(IO_FILE_BUFFER_SIZE_KEY, IO_FILE_BUFFER_SIZE_DEFAULT),
+                    (short)metadata.getRepl(),
+                    indexBlockSize,
+                    null);
+        } else {
+            return fs.create(path, overwrite, conf.getInt(IO_FILE_BUFFER_SIZE_KEY, IO_FILE_BUFFER_SIZE_DEFAULT), (short) metadata.getRepl(), blockSize);
+        }
+
+    }
+
+    private Path getTemporaryIndexFile() throws IOException {
+        return new Path(filePath, TEMPORARY_INDEX_NAME);
+    }
+
+    private Path newFile(Path p, boolean overwrite) throws IOException {
+        getInputInLazyPersist(p,true,overwrite).close();
         return p;
     }
 
     public void writeMetadata() throws IOException {
-        try (FSDataOutputStream out = fs.create(getMetadataPath(), true, conf.getInt(IO_FILE_BUFFER_SIZE_KEY, IO_FILE_BUFFER_SIZE_DEFAULT), metadata.getRepl(), blockSize)) {
+        try (FSDataOutputStream out = fs.create(getMetadataPath(), true, conf.getInt(IO_FILE_BUFFER_SIZE_KEY, IO_FILE_BUFFER_SIZE_DEFAULT), (short) metadata.getRepl(), blockSize)) {
             metadata.write(out);
         }
     }

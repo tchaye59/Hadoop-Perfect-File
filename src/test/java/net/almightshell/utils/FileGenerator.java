@@ -24,8 +24,7 @@ public class FileGenerator {
     String outPutDir;
     int fileNumber;
     List<String> manes = null;
-    String s = UUID.randomUUID().toString();
-
+    
     public FileGenerator(long maxSize, String outPutDir, int fileNumber) {
         this.maxSize = maxSize;
         this.outPutDir = outPutDir;
@@ -45,7 +44,7 @@ public class FileGenerator {
             dir.mkdirs();
         }
         
-        manes.parallelStream().forEach(mane->{
+        manes.stream().forEach(mane->{
             try {
                 File f = new File(dir,mane);
                 if (f.exists()) {
@@ -58,7 +57,7 @@ public class FileGenerator {
                 PrintWriter pw = new PrintWriter(f);
                 
                 while (f.length() <= size) {
-                    pw.println(s);
+                    pw.println(UUID.randomUUID().toString());
                 }
             } catch (IOException ex) {
                 Logger.getLogger(FileGenerator.class.getName()).log(Level.SEVERE, null, ex);
