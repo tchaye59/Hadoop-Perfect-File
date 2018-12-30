@@ -142,10 +142,8 @@ public class PerfectFilesUtil {
     }
 
     public static int[] checkSplitPositionsInDirectory(long key, long globalDepth) {
-//        String s = Long.toBinaryString(key);
-//        s = s.substring((int) (s.length() - globalDepth), s.length());
-
-        String s = String.valueOf(checkPositionInDirectory(key, globalDepth));
+        String s = Long.toBinaryString(key);
+        s = s.substring((int) (s.length() - globalDepth), s.length());
 
         StringBuilder sb = new StringBuilder(s);
         sb.setCharAt(0, '0');

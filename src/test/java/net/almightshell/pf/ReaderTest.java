@@ -44,7 +44,7 @@ public class ReaderTest {
         FileSystem fs = FileSystem.get(conf);
         FileSystem lfs = LocalFileSystem.getLocal(conf);
 
-        try (Reader reader = new Reader(conf, new Path("/hpf.hpf"))) {
+        try (PerfectFile.Reader reader = new PerfectFile.Reader(conf, new Path("/hpf.hpf"))) {
             for (FileStatus status : lfs.listStatus(new Path("file:///E:/hadoop-experiment/data/data-600/"))) {
                 System.out.println("File : " + status.getPath().getName());
                 System.out.println(reader.getBytes(status.getPath().getName()).length);

@@ -8,9 +8,12 @@ package net.almightshell.pf;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_DEFAULT;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_KEY;
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.io.BytesWritable;
-import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Writable;
 
 /**
@@ -19,7 +22,7 @@ import org.apache.hadoop.io.Writable;
  */
 public class PerfectFileMetadata implements Writable {
 
-    private int bucketCapacity = 5000;
+    private int bucketCapacity = Integer.MAX_VALUE;
     private int indexLastPosition = -1;
     private int usedPartFilePosition = -1;
     private String currentDataPart = null;
@@ -30,9 +33,29 @@ public class PerfectFileMetadata implements Writable {
 
     private Directory directory = new Directory();
     private PerfectTableHolder perfectTableHolder = null;
+    private final FileSystem fs;
+    private final Path metadataPath;
 
-    public PerfectFileMetadata(FileSystem fs) {
+    public PerfectFileMetadata(FileSystem fs, Path metadataPath) throws IOException {
         perfectTableHolder = new PerfectTableHolder(fs);
+        this.fs = fs;
+        this.metadataPath = metadataPath;
+        readMetadata(metadataPath);
+    }
+
+    private void readMetadata(Path metadataPath) throws IOException {
+        if (!fs.exists(metadataPath)) {
+            return;
+        }
+        try (FSDataInputStream in = fs.open(metadataPath)) {
+            this.readFields(in);
+        }
+    }
+
+    public void writeMetadata() throws IOException {
+        try (FSDataOutputStream out = fs.create(metadataPath, true, fs.getConf().getInt(IO_FILE_BUFFER_SIZE_KEY, IO_FILE_BUFFER_SIZE_DEFAULT), (short) getRepl(), PerfectFile.Writer.blockSize)) {
+            write(out);
+        }
     }
 
     @Override
@@ -41,8 +64,9 @@ public class PerfectFileMetadata implements Writable {
         out.writeInt(indexLastPosition);
         out.writeInt(usedPartFilePosition);
         out.writeUTF(currentDataPart);
-        directory.write(out);
         perfectTableHolder.write(out);
+        directory.write(out);
+
     }
 
     @Override
@@ -51,8 +75,9 @@ public class PerfectFileMetadata implements Writable {
         indexLastPosition = in.readInt();
         usedPartFilePosition = in.readInt();
         currentDataPart = in.readUTF();
-        directory.readFields(in);
         perfectTableHolder.readFields(in);
+        directory.readFields(in);
+
     }
 
     public int getBucketCapacity() {

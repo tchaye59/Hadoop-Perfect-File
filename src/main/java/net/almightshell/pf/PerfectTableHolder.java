@@ -18,6 +18,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 
@@ -120,7 +121,8 @@ public class PerfectTableHolder implements Writable {
         out.writeInt(map.size());
         for (String key : map.keySet()) {
             Text.writeString(out, key);
-            BinIO.storeObject(map.get(key), (OutputStream) out);
+            BytesWritable  bw = new BytesWritable(PerfectFilesUtil.toObjectStream(new PerfectHashDictionaryBean(map.get(key))));
+            bw.write(out);
         }
     }
 
@@ -129,11 +131,11 @@ public class PerfectTableHolder implements Writable {
         int size = in.readInt();
         map.clear();
         while (size > 0) {
-            try {
-                map.put(Text.readString(in), (HollowTrieMonotoneMinimalPerfectHashFunction) BinIO.loadObject((InputStream) in));
-            } catch (ClassNotFoundException ex) {
-                Logger.getLogger(PerfectTableHolder.class.getName()).log(Level.SEVERE, null, ex);
-            }
+            BytesWritable bw = new BytesWritable();
+            
+            String key = Text.readString(in);
+            bw.readFields(in);
+            map.put(key,PerfectFilesUtil.toObject(bw.getBytes(), PerfectHashDictionaryBean.class).getFunction() );
             size--;
         }
     }

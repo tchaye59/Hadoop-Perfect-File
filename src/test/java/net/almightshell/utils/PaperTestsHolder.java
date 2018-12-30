@@ -85,10 +85,11 @@ public class PaperTestsHolder {
     }
 
     FileSystem fs;
+    FileSystem lfs;
 
     Configuration conf;
 
-    String localDataPath = "E:\\hadoop-experiment\\data\\data-";
+    String localDataPath = "file:///E:/hadoop-experiment/data/data-";
     String localResultPath = "E:\\hadoop-experiment\\results\\";
     String hdfsDataPath = "/data/";
     String hdfsArchivesDataPath = "";
@@ -103,7 +104,7 @@ public class PaperTestsHolder {
     List<String> fileNameList = new ArrayList<>();
     List<String> fileNameSubList = new ArrayList<>();
 
-    private PerfectFile hpf = null;
+    private PerfectFile.Reader reader = null;
 
     public PaperTestsHolder(FileSystem fs, Configuration conf, int fileNumber) throws IOException {
         this.fs = fs;
@@ -112,6 +113,7 @@ public class PaperTestsHolder {
         this.localDataPath += fileNumber;
         this.localResultPath += fileNumber;
         this.hdfsDataPath += fileNumber;
+        lfs = LocalFileSystem.getLocal(conf);
 
         this.hdfsArchivesDataPath = hdfsDataPath + "/archives";
 
@@ -415,7 +417,8 @@ public class PaperTestsHolder {
         long currentTimeMillis = System.currentTimeMillis();
 
         try (MapFile.Writer writer = new MapFile.Writer(conf, path, wKeyOpt, wValueOpt)) {
-            List<FileStatus> fses = Arrays.asList(fs.listStatus(new Path(hdfsFilesPath)));
+            
+            List<FileStatus> fses = Arrays.asList(lfs.listStatus(new Path(localDataPath)));
             fses.sort((x, y) -> x.getPath().getName().compareTo(y.getPath().getName()));
             for (FileStatus status : fses) {
                 if (status.isFile()) {
@@ -444,10 +447,14 @@ public class PaperTestsHolder {
             fs.delete(path, true);
         }
 
-        PerfectFile pf = PerfectFile.newFile(conf, path, 10000);
-
         long currentTimeMillis = System.currentTimeMillis();
-        pf.putAll(new Path(hdfsFilesPath));
+
+        try (PerfectFile.Writer writer = new PerfectFile.Writer(conf, path, Integer.MAX_VALUE, 1)) {
+            for (FileStatus status : lfs.listStatus(new Path(localDataPath))) {
+                writer.putFromLocal(status);
+            }
+        }
+
         long time = System.currentTimeMillis() - currentTimeMillis;
 
         ExperimentResultItem resultItem = new ExperimentResultItem();
@@ -492,7 +499,7 @@ public class PaperTestsHolder {
 
         long currentTimeMillis = System.currentTimeMillis();
 
-        for (String name : fileNameSubList) {
+        fileNameSubList.forEach((name) -> {
             byte[] bs;
             try {
                 try (FSDataInputStream in = fs.open(new Path(hdfsFilesPath, name))) {
@@ -502,7 +509,7 @@ public class PaperTestsHolder {
             } catch (Exception e) {
                 e.printStackTrace();
             }
-        }
+        });
 
         long time = System.currentTimeMillis() - currentTimeMillis;
 
@@ -517,14 +524,13 @@ public class PaperTestsHolder {
     public ExperimentResultItem accessFromMapFile() throws IOException {
 
         long currentTimeMillis = System.currentTimeMillis();
-        MapFile.Reader reader = new MapFile.Reader(new Path(mapFilePath), conf);
-
-        for (String name : fileNameSubList) {
-            BytesWritable bw = new BytesWritable();
-            reader.get(new Text(name), bw);
-            bw.getBytes();
+        try (MapFile.Reader mReader = new MapFile.Reader(new Path(mapFilePath), conf)) {
+            for (String name : fileNameSubList) {
+                BytesWritable bw = new BytesWritable();
+                mReader.get(new Text(name), bw);
+                bw.getBytes();
+            }
         }
-
         long time = System.currentTimeMillis() - currentTimeMillis;
 
         ExperimentResultItem resultItem = new ExperimentResultItem();
@@ -537,13 +543,13 @@ public class PaperTestsHolder {
 
     public ExperimentResultItem accessFromHPF() throws IOException, Exception {
 
-        if (hpf == null) {
-            hpf = PerfectFile.open(conf, new Path(hpFilePath));
+        if (reader == null) {
+            reader = new PerfectFile.Reader(conf, new Path(hpFilePath));
         }
 
         long currentTimeMillis = System.currentTimeMillis();
         for (String name : fileNameSubList) {
-            hpf.getBytes(name);
+            reader.getBytes(name);
         }
         long time = System.currentTimeMillis() - currentTimeMillis;
 
@@ -565,11 +571,7 @@ public class PaperTestsHolder {
         System.out.println(resultItem);
     }
 
-    public void clean() throws IOException {
-//            fs.delete(new Path(harFilePath), true);
-//            fs.delete(new Path(mapFilePath), true);
-//            fs.delete(new Path(hpFilePath), true);
-    }
+   
 
     /**
      * returns the amount of memory occupied by the contents(files,folders) of

@@ -43,7 +43,7 @@ public class WriterTest {
         FileSystem fs = FileSystem.get(conf);
         FileSystem lfs = LocalFileSystem.getLocal(conf);
 
-        try (Writer writer = new Writer(conf, new Path("/hpf.hpf"),Integer.MAX_VALUE,1)) {
+        try (PerfectFile.Writer writer = new PerfectFile.Writer(conf, new Path("/hpf.hpf"),500,1)) {
             for (FileStatus status : lfs.listStatus(new Path("file:///E:/hadoop-experiment/data/data-600/"))) {
                 System.out.println("File : "+status.getPath().getName());
                 writer.putFromLocal(status);
