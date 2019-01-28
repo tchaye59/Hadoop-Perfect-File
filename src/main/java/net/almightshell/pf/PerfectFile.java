@@ -11,7 +11,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.FileSystemException;
 import java.util.ArrayList;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -20,14 +19,12 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_KEY;
-import org.apache.hadoop.fs.CreateFlag;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.IntWritable;
 
@@ -52,7 +49,7 @@ public class PerfectFile {
         /**
          * size of each part file size *
          */
-        long partMaxSize = 2 * 1024 * 1024 * 1024l;
+        long partMaxSize = 5 * 1024 * 1024 * 1024l;
 
         /**
          * size of blocks in hadoop archives *
@@ -451,7 +448,9 @@ public class PerfectFile {
             this.metadata = new PerfectFileMetadata(fs, getMetadataPath());
 
             //recoveryOnFailure
-            new Writer(conf, dirName, -1, 1).recoveryOnFailure();
+            if (fs.exists(getTemporaryIndexFile())) {
+                new Writer(conf, dirName, -1, 1).recoveryOnFailure();
+            }
         }
 
         public byte[] getBytes(String key) throws IOException {
@@ -531,6 +530,10 @@ public class PerfectFile {
 
         private Path getPartFilePath(int position) {
             return new Path(dirName, PART_NAME + position);
+        }
+        
+         private Path getTemporaryIndexFile() throws IOException {
+            return new Path(dirName, PerfectFile.TEMPORARY_INDEX_NAME);
         }
 
         @Override

@@ -44,7 +44,7 @@ public class FileGenerator {
             dir.mkdirs();
         }
         
-        manes.stream().forEach(mane->{
+        manes.parallelStream().forEach(mane->{
             try {
                 File f = new File(dir,mane);
                 if (f.exists()) {

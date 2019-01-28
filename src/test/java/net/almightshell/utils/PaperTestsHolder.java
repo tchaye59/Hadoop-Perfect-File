@@ -6,20 +6,20 @@
 package net.almightshell.utils;
 
 import java.io.BufferedWriter;
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertTrue;
 import net.almightshell.pf.PerfectFile;
 import org.apache.hadoop.conf.Configuration;
@@ -27,19 +27,17 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.FileUtil;
-import org.apache.hadoop.fs.FsStatus;
 import org.apache.hadoop.fs.HarFileSystem;
 import org.apache.hadoop.fs.LocalFileSystem;
-import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.MapFile;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.tools.DistCp;
+import org.apache.hadoop.tools.DistCpOptions;
 import org.apache.hadoop.tools.HadoopArchives;
 import org.apache.hadoop.util.ToolRunner;
 
@@ -48,20 +46,6 @@ import org.apache.hadoop.util.ToolRunner;
  * @author Shell
  */
 public class PaperTestsHolder {
-
-    private List<String> getDatasetsNames(int dataset) {
-        List<String> names = new ArrayList<>();
-        try {
-            try (FSDataInputStream in = fs.open(new Path("/data/10000", "dataset-" + dataset))) {
-                new IntWritable().readFields(in);
-                while (in.available() > 0) {
-                    names.add(Text.readString(in));
-                }
-            }
-        } catch (Exception exception) {
-        }
-        return names;
-    }
 
     public class ExperimentResult {
 
@@ -73,13 +57,13 @@ public class PaperTestsHolder {
 
         public String methodname = "";
         //size in byte
-        public long nameNodeMetadataUsage = 0;
+        public long metadataUsage = 0;
 
         public long duration = 0;
 
         @Override
         public String toString() {
-            return "ExperimentResultItem{" + "methodname=" + methodname + ", nameNodeMetadataUsage=" + nameNodeMetadataUsage + ", duration=" + duration + '}';
+            return "ExperimentResultItem{" + "methodname=" + methodname + ", nameNodeMetadataUsage=" + metadataUsage + ", duration=" + duration + '}';
         }
 
     }
@@ -104,7 +88,7 @@ public class PaperTestsHolder {
     List<String> fileNameList = new ArrayList<>();
     List<String> fileNameSubList = new ArrayList<>();
 
-    private PerfectFile.Reader reader = null;
+    boolean cache = false;
 
     public PaperTestsHolder(FileSystem fs, Configuration conf, int fileNumber) throws IOException {
         this.fs = fs;
@@ -129,16 +113,13 @@ public class PaperTestsHolder {
         }
 
         harFilePath = hdfsArchivesDataPath + "/har-" + fileNumber + ".har";
-        mapFilePath = hdfsArchivesDataPath + "/mapfile-" + fileNumber;
-        hpFilePath = hdfsArchivesDataPath + "/hpf-" + fileNumber + ".hpf";
+        mapFilePath = "/mapfile-" + fileNumber;
+        hpFilePath = "/hpf-" + fileNumber + ".hpf";
         hdfsFilesPath = hdfsDataPath + "/files";
 
         try {
-            fileNameList = getDatasetsNames(fileNumber);
-            if (fileNameList.isEmpty()) {
-                for (FileStatus listStatu : fs.listStatus(new Path(hdfsFilesPath))) {
-                    fileNameList.add(listStatu.getPath().getName());
-                }
+            for (FileStatus listStatu : lfs.listStatus(new Path(localDataPath))) {
+                fileNameList.add(listStatu.getPath().getName());
             }
             fileNameSubList = fileNameList;
         } catch (Exception e) {
@@ -150,6 +131,11 @@ public class PaperTestsHolder {
     public ExperimentResultItem processUploadDataSets() throws FileNotFoundException, IOException, Exception {
         System.out.println("->Upload Files from HDFS");
         return uploadToHDFS();
+    }
+
+    public ExperimentResultItem processDistUploadDataSets() throws FileNotFoundException, IOException, Exception {
+        System.out.println("->Dist Upload Files from HDFS");
+        return distUploadToHDFS();
     }
 
     public ExperimentResult processCreat() throws FileNotFoundException, IOException, Exception {
@@ -169,16 +155,15 @@ public class PaperTestsHolder {
             resultItem = creatHAR();
             result.resultItems.add(resultItem);
             printLog(resultItem, writer, true);
-
-            System.out.println("->MapFile : Creation");
-            resultItem = creatMapFile();
-            result.resultItems.add(resultItem);
-            printLog(resultItem, writer, true);
-
-            System.out.println("->HPF : Creation");
-            resultItem = creatHPF();
-            result.resultItems.add(resultItem);
-            printLog(resultItem, writer, true);
+//            System.out.println("->MapFile : Creation");
+//            resultItem = creatMapFile();
+//            result.resultItems.add(resultItem);
+//            printLog(resultItem, writer, true);
+//
+//            System.out.println("->HPF : Creation");
+//            resultItem = creatHPF();
+//            result.resultItems.add(resultItem);
+//            printLog(resultItem, writer, true);
 
             writer.println();
             writer.println();
@@ -186,12 +171,12 @@ public class PaperTestsHolder {
         return result;
     }
 
-    public ExperimentResult processAccess(int fileNumber) throws FileNotFoundException, IOException, Exception {
-        return processAccess(fileNumber, true);
+    public ExperimentResult processAccess(int fileNumber, boolean cache) throws FileNotFoundException, IOException, Exception {
+        return processAccess(fileNumber, cache, true);
     }
 
-    public ExperimentResult processAccess(int fileNumber, boolean random) throws FileNotFoundException, IOException, Exception {
-
+    public ExperimentResult processAccess(int fileNumber, boolean cache, boolean random) throws FileNotFoundException, IOException, Exception {
+        this.cache = cache;
         if (fileNumber > 0) {
             if (random) {
                 Collections.shuffle(fileNameList, new Random(System.nanoTime()));
@@ -205,6 +190,7 @@ public class PaperTestsHolder {
         }
 
         ExperimentResult result = new ExperimentResult();
+        result.fileNumber = this.fileNumber;
         File file = new File(localResultPath, "Access.txt");
         if (!file.exists()) {
             file.createNewFile();
@@ -214,26 +200,22 @@ public class PaperTestsHolder {
         System.out.println("Starting the archive files Access test...");
         try (PrintWriter writer = new PrintWriter(new BufferedWriter(new FileWriter(file, true)))) {
 
-            System.out.println("->Access Files from HDFS");
-            resultItem = accessFromHDFS();
-            result.resultItems.add(resultItem);
-            printLog(resultItem, writer, false);
-
-            System.out.println("->HAR : Access Files");
-            resultItem = accessFromHAR();
-            result.resultItems.add(resultItem);
-            printLog(resultItem, writer, false);
-
-            System.out.println("->MapFile : Access Files");
-            resultItem = accessFromMapFile();
-            result.resultItems.add(resultItem);
-            printLog(resultItem, writer, false);
-
+//            System.out.println("->Access Files from HDFS");
+//            resultItem = accessFromHDFS();
+//            result.resultItems.add(resultItem);
+//            printAccess(resultItem, writer);
+//            System.out.println("->HAR : Access Files");
+//            resultItem = accessFromHAR();
+//            result.resultItems.add(resultItem);
+//            printAccess(resultItem, writer);
+//            System.out.println("->MapFile : Access Files");
+//            resultItem = accessFromMapFile();
+//            result.resultItems.add(resultItem);
+//            printAccess(resultItem, writer);
             System.out.println("->HPF : Access Files");
             resultItem = accessFromHPF();
             result.resultItems.add(resultItem);
-            printLog(resultItem, writer, false);
-
+            printAccess(resultItem, writer);
             writer.println();
             writer.println();
         }
@@ -267,7 +249,7 @@ public class PaperTestsHolder {
         ExperimentResultItem resultItem = new ExperimentResultItem();
         resultItem.methodname = "HAR";
         resultItem.duration = time;
-        resultItem.nameNodeMetadataUsage = calculateNameNodeMetadataUsage(harPath);
+        resultItem.metadataUsage = calculateNameNodeMetadataUsage(harPath);
 
         System.gc();
         return resultItem;
@@ -280,127 +262,55 @@ public class PaperTestsHolder {
 
         long currentTimeMillis = System.currentTimeMillis();
 
-//        RemoteIterator<LocatedFileStatus> iterator = fs.listFiles(new Path(localDataPath),true);
-//        
-//        while (iterator.hasNext()) {
-//            LocatedFileStatus next = iterator.next();
-//             fs.copyFromLocalFile(false, false, status.getPath(), new Path(outPutDir, status.getPath().getName()));
-//        }
-        FileSystem lfs;
-        lfs = new Path("file:///" + localDataPath).getFileSystem(conf);
-        Arrays.asList(lfs.listStatus(new Path("file:///" + localDataPath))).stream().forEach(status -> {
-            try {
-                Path dest = new Path(outPutDir, status.getPath().getName());
-                if (!fs.exists(dest)) {
-                    fs.copyFromLocalFile(false, false, status.getPath(), new Path(outPutDir, status.getPath().getName()));
-                }
-            } catch (Exception ex) {
-                ex.printStackTrace();
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException ex1) {
-                    Logger.getLogger(PaperTestsHolder.class.getName()).log(Level.SEVERE, null, ex1);
-                }
-            }
-        });
+        Arrays.asList(lfs.listStatus(new Path(localDataPath))).parallelStream()
+                .forEach(status -> {
+                    try {
+                        Path p = new Path(outPutDir, status.getPath().getName());
 
-//        for (FileStatus status : fs.listStatus(new Path(localDataPath))) {
-//            fs.copyFromLocalFile(false, false, status.getPath(), new Path(outPutDir, status.getPath().getName()));
-//        }
-//        fs.copyFromLocalFile(new Path(localDataPath), outPutDir);
+                        if (fs.exists(p)) {
+                            FileStatus rs = fs.getFileStatus(p);
+
+                            if (rs.isFile() && rs.getLen() == 0) {
+                                fs.delete(p, true);
+                            } else {
+                                return;
+                            }
+                        }
+
+                        fs.copyFromLocalFile(false, false, status.getPath(), p);
+
+                    } catch (IOException ex) {
+                        Logger.getLogger(PaperTestsHolder.class.getName()).log(Level.SEVERE, null, ex);
+                    }
+                });
+
         long time = System.currentTimeMillis() - currentTimeMillis;
 
         ExperimentResultItem resultItem = new ExperimentResultItem();
         resultItem.methodname = "UploadToHDFS";
         resultItem.duration = time;
-        resultItem.nameNodeMetadataUsage = calculateNameNodeMetadataUsage(new Path(hdfsFilesPath));
+        resultItem.metadataUsage = calculateNameNodeMetadataUsage(new Path(hdfsFilesPath));
         System.gc();
         return resultItem;
     }
 
-    public void generateDatasetsFiles(int[] datasets) throws IOException, InterruptedException {
-        Collections.shuffle(fileNameList, new Random(System.nanoTime()));
+    public ExperimentResultItem distUploadToHDFS() throws IOException, Exception {
 
-        for (int dataset : datasets) {
-            List<String> manes = fileNameList.subList(0, dataset);
-            Path path = new Path(hdfsDataPath, "dataset-" + dataset);
+        long currentTimeMillis = System.currentTimeMillis();
 
-            if (!fs.exists(path)) {
-                try (FSDataOutputStream out = fs.create(path)) {
-                    IntWritable iw = new IntWritable(manes.size());
-                    iw.write(out);
-                    for (String mane : manes) {
-                        Text.writeString(out, mane);
-                    }
-                }
-            } else {
-                manes = getDatasetsNames(dataset);
-            }
+        DistCpOptions dco = new DistCpOptions(new Path(localDataPath), new Path(hdfsFilesPath));
 
-            Path tempDir = new Path("/data/", "" + dataset + "/files");
-            if (!fs.exists(tempDir)) {
-                fs.mkdirs(tempDir);
-            }
+        int result = ToolRunner.run(new DistCp(conf, dco), new String[]{"-m", "200", localDataPath, hdfsFilesPath});
 
-            manes.parallelStream().forEach(mane -> {
-                try {
-                    Path destPath = new Path(tempDir, mane);
+        // assertEquals("Should have failed with a -1, indicating invalid arguments",-1, result);
+        long time = System.currentTimeMillis() - currentTimeMillis;
 
-                    if (fs.exists(destPath)) {
-                        FileStatus st = fs.getFileStatus(destPath);
-                        if (st.getLen() > 0) {
-                            return;
-                        }
-                        fs.delete(destPath, true);
-                    }
-                } catch (IOException ex) {
-                    Logger.getLogger(PaperTestsHolder.class.getName()).log(Level.SEVERE, null, ex);
-                }
-            });
-
-            manes.parallelStream().forEach(mane -> {
-
-                try {
-                    FileStatus srcStatus = fs.getFileStatus(new Path(hdfsFilesPath, mane));
-                    Path destPath = new Path(tempDir, mane);
-
-                    if (fs.exists(destPath)) {
-                        FileStatus st = fs.getFileStatus(destPath);
-                        if (st.getLen() > 0) {
-                            return;
-                        }
-                        fs.delete(destPath, true);
-                    }
-
-                    try {
-                        FSDataOutputStream out = fs.create(destPath);
-                        IOUtils.copyBytes(fs.open(srcStatus.getPath()), out, conf);
-                    } catch (IOException e) {
-                        fs.delete(destPath, true);
-                        e.printStackTrace();
-                    }
-                } catch (IOException ex) {
-                    Logger.getLogger(PaperTestsHolder.class.getName()).log(Level.SEVERE, null, ex);
-                }
-
-            });
-
-//            for (String mane : manes) {
-//                FileStatus srcStatus = fs.getFileStatus(new Path(hdfsFilesPath, mane));
-//                Path destPath = new Path(tempDir, mane);
-//
-//                if (!fs.exists(destPath)) {
-//                    try {
-//                        FSDataOutputStream out = fs.create(destPath);
-//                        IOUtils.copyBytes(fs.open(srcStatus.getPath()), out, (int) srcStatus.getLen());
-//                    } catch (IOException e) {
-//                        Thread.sleep(100);
-//                        fs.delete(destPath, false);
-//                    }
-//                }
-//
-//            }
-        }
+        ExperimentResultItem resultItem = new ExperimentResultItem();
+        resultItem.methodname = "DistCp UploadToHDFS";
+        resultItem.duration = time;
+        resultItem.metadataUsage = calculateNameNodeMetadataUsage(new Path(hdfsFilesPath));
+        System.gc();
+        return resultItem;
     }
 
     public ExperimentResultItem creatMapFile() throws IOException {
@@ -417,13 +327,13 @@ public class PaperTestsHolder {
         long currentTimeMillis = System.currentTimeMillis();
 
         try (MapFile.Writer writer = new MapFile.Writer(conf, path, wKeyOpt, wValueOpt)) {
-            
+
             List<FileStatus> fses = Arrays.asList(lfs.listStatus(new Path(localDataPath)));
             fses.sort((x, y) -> x.getPath().getName().compareTo(y.getPath().getName()));
             for (FileStatus status : fses) {
                 if (status.isFile()) {
                     byte[] bs = new byte[(int) status.getLen()];
-                    fs.open(status.getPath()).readFully(bs);
+                    lfs.open(status.getPath()).readFully(bs);
                     writer.append(new Text(status.getPath().getName()), new BytesWritable(bs));
                 }
             }
@@ -434,7 +344,7 @@ public class PaperTestsHolder {
         ExperimentResultItem resultItem = new ExperimentResultItem();
         resultItem.methodname = "MapFile";
         resultItem.duration = time;
-        resultItem.nameNodeMetadataUsage = calculateNameNodeMetadataUsage(path);
+        resultItem.metadataUsage = calculateNameNodeMetadataUsage(path);
         System.gc();
         return resultItem;
 
@@ -449,7 +359,7 @@ public class PaperTestsHolder {
 
         long currentTimeMillis = System.currentTimeMillis();
 
-        try (PerfectFile.Writer writer = new PerfectFile.Writer(conf, path, Integer.MAX_VALUE, 1)) {
+        try (PerfectFile.Writer writer = new PerfectFile.Writer(conf, path, 200000, 1)) {
             for (FileStatus status : lfs.listStatus(new Path(localDataPath))) {
                 writer.putFromLocal(status);
             }
@@ -460,7 +370,7 @@ public class PaperTestsHolder {
         ExperimentResultItem resultItem = new ExperimentResultItem();
         resultItem.methodname = "HPF";
         resultItem.duration = time;
-        resultItem.nameNodeMetadataUsage = calculateNameNodeMetadataUsage(path);
+        resultItem.metadataUsage = calculateNameNodeMetadataUsage(path);
         System.gc();
         return resultItem;
 
@@ -469,12 +379,15 @@ public class PaperTestsHolder {
     public ExperimentResultItem accessFromHAR() throws IOException, Exception {
 
         long currentTimeMillis = System.currentTimeMillis();
+        long totalMemory = Runtime.getRuntime().totalMemory();
 
         Path parent = new Path("har:///" + harFilePath);
+
         FileSystem hfs = parent.getFileSystem(conf);
 
         for (String name : fileNameSubList) {
-            Path harSfPath = new Path(parent, name);
+
+            Path harSfPath = new Path(parent, (this.fileNumber >= 300000 ? "files/" : "") + name);
 
             FileStatus status = hfs.getFileStatus(harSfPath);
             byte[] bs = new byte[(int) status.getLen()];
@@ -482,13 +395,17 @@ public class PaperTestsHolder {
             try (FSDataInputStream in = hfs.open(harSfPath)) {
                 in.readFully(bs);
             }
-        }
 
+            if (!cache) {
+                hfs = HarFileSystem.get(parent.toUri(), conf);
+            }
+        }
         long time = System.currentTimeMillis() - currentTimeMillis;
 
         ExperimentResultItem resultItem = new ExperimentResultItem();
         resultItem.methodname = "HAR";
         resultItem.duration = time;
+        resultItem.metadataUsage = Runtime.getRuntime().totalMemory() - totalMemory;
 
         System.gc();
         return resultItem;
@@ -497,9 +414,13 @@ public class PaperTestsHolder {
 
     public ExperimentResultItem accessFromHDFS() throws IOException {
 
+        long totalMemory = Runtime.getRuntime().totalMemory();
+
         long currentTimeMillis = System.currentTimeMillis();
 
-        fileNameSubList.forEach((name) -> {
+        FileSystem fs = FileSystem.get(conf);
+
+        for (String name : fileNameSubList) {
             byte[] bs;
             try {
                 try (FSDataInputStream in = fs.open(new Path(hdfsFilesPath, name))) {
@@ -509,12 +430,17 @@ public class PaperTestsHolder {
             } catch (Exception e) {
                 e.printStackTrace();
             }
-        });
+
+            if (!cache) {
+                fs = FileSystem.get(conf);
+            }
+        }
 
         long time = System.currentTimeMillis() - currentTimeMillis;
 
         ExperimentResultItem resultItem = new ExperimentResultItem();
         resultItem.methodname = "FromHDFS";
+        resultItem.metadataUsage = Runtime.getRuntime().totalMemory() - totalMemory;
         resultItem.duration = time;
 
         System.gc();
@@ -523,18 +449,33 @@ public class PaperTestsHolder {
 
     public ExperimentResultItem accessFromMapFile() throws IOException {
 
+        long totalMemory = Runtime.getRuntime().totalMemory();
+
         long currentTimeMillis = System.currentTimeMillis();
-        try (MapFile.Reader mReader = new MapFile.Reader(new Path(mapFilePath), conf)) {
+
+        if (cache) {
+            try (MapFile.Reader mReader = new MapFile.Reader(new Path(mapFilePath), conf)) {
+                for (String name : fileNameSubList) {
+                    BytesWritable bw = new BytesWritable();
+                    mReader.get(new Text(name), bw);
+                    bw.getBytes();
+                }
+            }
+        } else {
             for (String name : fileNameSubList) {
-                BytesWritable bw = new BytesWritable();
-                mReader.get(new Text(name), bw);
-                bw.getBytes();
+                try (MapFile.Reader mReader = new MapFile.Reader(new Path(mapFilePath), conf)) {
+                    BytesWritable bw = new BytesWritable();
+                    mReader.get(new Text(name), bw);
+                    bw.getBytes();
+                }
             }
         }
+
         long time = System.currentTimeMillis() - currentTimeMillis;
 
         ExperimentResultItem resultItem = new ExperimentResultItem();
         resultItem.methodname = "MapFile";
+        resultItem.metadataUsage = Runtime.getRuntime().totalMemory() - totalMemory;
         resultItem.duration = time;
 
         System.gc();
@@ -542,19 +483,21 @@ public class PaperTestsHolder {
     }
 
     public ExperimentResultItem accessFromHPF() throws IOException, Exception {
-
-        if (reader == null) {
-            reader = new PerfectFile.Reader(conf, new Path(hpFilePath));
-        }
+        long totalMemory = Runtime.getRuntime().totalMemory();
 
         long currentTimeMillis = System.currentTimeMillis();
-        for (String name : fileNameSubList) {
-            reader.getBytes(name);
+
+        try (PerfectFile.Reader reader = new PerfectFile.Reader(conf, new Path(hpFilePath))) {
+            for (String name : fileNameSubList) {
+                reader.getBytes(name);
+            }
         }
+
         long time = System.currentTimeMillis() - currentTimeMillis;
 
         ExperimentResultItem resultItem = new ExperimentResultItem();
         resultItem.methodname = "HPF";
+        resultItem.metadataUsage = Runtime.getRuntime().totalMemory() - totalMemory;
         resultItem.duration = time;
 
         System.gc();
@@ -565,13 +508,22 @@ public class PaperTestsHolder {
         writer.println("-->" + resultItem.methodname);
         writer.println("---->Duration(ms) : " + resultItem.duration);
         if (creat) {
-            writer.println("---->NameNodeMetadataUsage(bytes) : " + resultItem.nameNodeMetadataUsage);
+            writer.println("---->NameNodeMetadataUsage(bytes) : " + resultItem.metadataUsage);
+        } else {
+            writer.println("---->Client MetadataUsage(bytes) : " + resultItem.metadataUsage);
         }
         writer.println();
         System.out.println(resultItem);
     }
 
-   
+    private void printAccess(ExperimentResultItem resultItem, PrintWriter writer) {
+        writer.println("-->" + resultItem.methodname);
+        writer.println("-->Cache enabled" + cache);
+        writer.println("---->Duration(ms) : " + resultItem.duration);
+        writer.println("---->Client MetadataUsage(bytes) : " + resultItem.metadataUsage);
+        writer.println();
+        System.out.println(resultItem);
+    }
 
     /**
      * returns the amount of memory occupied by the contents(files,folders) of
@@ -582,19 +534,15 @@ public class PaperTestsHolder {
      * @throws IOException
      */
     public long calculateNameNodeMetadataUsage(Path dirPath) throws IOException {
-        long size = 0;
-        for (FileStatus status : fs.listStatus(dirPath)) {
-            size += calculateNameNodeMetadataUsage(status);
-        }
-        return size;
+        return Arrays.asList(fs.listStatus(dirPath)).parallelStream().mapToLong(m -> calculateNameNodeMetadataUsage(m)).sum();
+    }
+
+    public long calculateNameNodeMetadataUsageForHAR(Path dirPath) throws IOException {
+        return Arrays.asList(fs.listStatus(dirPath)).parallelStream().mapToLong(m -> calculateNameNodeMetadataUsage(m)).sum();
     }
 
     public long calculatePathSize(Path dirPath) throws IOException {
-        long size = 0;
-        for (FileStatus status : fs.listStatus(dirPath)) {
-            size += status.getLen();
-        }
-        return size;
+        return fs.getContentSummary(dirPath).getLength();
     }
 
     /**
@@ -605,14 +553,23 @@ public class PaperTestsHolder {
      * @return
      * @throws IOException
      */
-    private long calculateNameNodeMetadataUsage(FileStatus status) throws IOException {
+    private long calculateNameNodeMetadataUsage(FileStatus status) {
         if (status.isDirectory()) {
 //            return 264 + 2 * fileName.length;
             return 290;
         } else {
-            int bocksNum = fs.getFileBlockLocations(status, 0, status.getLen()).length;
-            return 250 + bocksNum * 150 + (bocksNum * status.getReplication() * 72);
+            try {
+                int bocksNum = fs.getFileBlockLocations(status, 0, status.getLen()).length;
+                return 250 + bocksNum * 150 + (bocksNum * status.getReplication() * 72);
+            } catch (IOException ex) {
+                Logger.getLogger(PaperTestsHolder.class.getName()).log(Level.SEVERE, null, ex);
+            }
         }
+        return 0;
+    }
+
+    public long calculateNameNodeMetadataUsageBlock(int bocksNum) {
+        return 250 + bocksNum * 150 + (bocksNum * 3 * 72);
     }
 
 }
