@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.FileSystemException;
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -27,6 +28,7 @@ import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
 
 /**
  *
@@ -36,6 +38,7 @@ public class PerfectFile {
 
     public static final Log LOG = LogFactory.getLog(PerfectFile.class);
     public static final String INDEX_NAME = "index-";
+    public static final String NAMES = "names";
     public static final String TEMPORARY_INDEX_NAME = "temopraryIndex";
     public static final String PART_NAME = "part-";
     public static final String METADATA_NAME = "metadata";
@@ -64,6 +67,7 @@ public class PerfectFile {
 
         private FSDataOutputStream outPart;
         private FSDataOutputStream outTmpIndex;
+        private FSDataOutputStream outNames;
         long remainPartSize = 0;
 
         public Writer(Configuration conf, Path dirName, int bucketCapacity, int replication) throws IOException {
@@ -73,7 +77,7 @@ public class PerfectFile {
             fs = FileSystem.get(conf);
             lfs = LocalFileSystem.getLocal(conf);
 
-            metadata = new PerfectFileMetadata(fs,getMetadataPath());
+            metadata = new PerfectFileMetadata(fs, getMetadataPath());
             metadata.setRepl(replication);
 
             if (!fs.exists(dirName)) {
@@ -84,12 +88,15 @@ public class PerfectFile {
                 this.currentDataPartPath = newPartFile();
                 metadata.setCurrentDataPartPath(currentDataPartPath.getName());
                 metadata.setBucketCapacity(bucketCapacity);
-               metadata.writeMetadata();
+                metadata.writeMetadata();
+
+                newFile(new Path(dirName, NAMES), true);
             } else {
                 currentDataPartPath = new Path(dirName, metadata.getCurrentDataPartPath());
             }
             metadata.setBucketCapacity(bucketCapacity);
 
+            outNames = fs.append(new Path(dirName, NAMES));
             outPart = fs.append(currentDataPartPath);
             remainPartSize = partMaxSize - outPart.getPos();
             recoveryOnFailure();
@@ -175,6 +182,7 @@ public class PerfectFile {
 
             //
             addBucketEntry(be);
+            new Text(key).write(outNames);
 
             //
             if (remainPartSize <= 0) {
@@ -188,13 +196,16 @@ public class PerfectFile {
 
         @Override
         public void close() throws IOException {
-            
-            
+
             if (outPart != null) {
                 outPart.close();
             }
             if (outTmpIndex != null) {
                 outTmpIndex.close();
+            }
+
+            if (outNames != null) {
+                outNames.close();
             }
 
             List<Bucket> buckets = flushBucketsData();
@@ -336,7 +347,7 @@ public class PerfectFile {
 //                        indexBlockSize,
 //                        null);
 //            } else {
-                return fs.create(path, overwrite, conf.getInt(IO_FILE_BUFFER_SIZE_KEY, IO_FILE_BUFFER_SIZE_DEFAULT), (short) metadata.getRepl(), blockSize);
+            return fs.create(path, overwrite, conf.getInt(IO_FILE_BUFFER_SIZE_KEY, IO_FILE_BUFFER_SIZE_DEFAULT), (short) metadata.getRepl(), blockSize);
 //            }
 
         }
@@ -349,8 +360,6 @@ public class PerfectFile {
             getInputInLazyPersist(p, false, overwrite).close();
             return p;
         }
-
-        
 
         private Path getMetadataPath() {
             if (metadataPath == null) {
@@ -465,6 +474,17 @@ public class PerfectFile {
             return new ByteArrayInputStream(getBytes(key));
         }
 
+        public List<String> keys() throws IOException {
+            FSDataInputStream in = fs.open(new Path(dirName, NAMES));
+            List<String> keys = new LinkedList<>();
+            Text text = new Text();
+            while (in.available() > 0) {
+                text.readFields(in);
+                keys.add(text.toString());
+            }
+            return keys;
+        }
+
         public byte[] getBytes(BucketEntry entry) throws IOException {
             byte[] bs;
             int compressedDataSize;
@@ -531,8 +551,8 @@ public class PerfectFile {
         private Path getPartFilePath(int position) {
             return new Path(dirName, PART_NAME + position);
         }
-        
-         private Path getTemporaryIndexFile() throws IOException {
+
+        private Path getTemporaryIndexFile() throws IOException {
             return new Path(dirName, PerfectFile.TEMPORARY_INDEX_NAME);
         }
 
